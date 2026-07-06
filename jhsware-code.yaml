@@ -1,0 +1,27 @@
+filesystem:
+  - ./build.sh
+  - ./bin
+  - ./lib
+  - ./test
+  - ./macos
+  - ./docs
+  - ./pubspec.yaml
+  - ./README.md
+  - ./CHANGELOG.md
+  - ./dart_test.yaml
+  - ./.gitignore
+  - ./packages
+git:
+  - ./build.sh
+  - ./bin
+  - ./lib
+  - ./test
+  - ./macos
+  - ./docs
+  - ./pubspec.yaml
+  - ./README.md
+  - ./CHANGELOG.md
+  - ./dart_test.yaml
+  - ./.gitignore
+  - ./packages
+  
