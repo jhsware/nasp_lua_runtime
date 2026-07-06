@@ -1,0 +1,17 @@
+name: nasp_lua_runtime
+description: >-
+  Shared, pure-Dart Lua 5.3 runtime for nasp_waves scripting: the sandboxed
+  LuaScriptRuntime, the per-kind typed I/O contracts + validator, and the
+  Dart<->Lua marshalling. Byte-identical on the server (simulation) and the
+  mobile app (execution). No Flutter, no FFI, no native build.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.11.4
+
+dependencies:
+  lua_dardo_plus: ^0.3.0
+
+dev_dependencies:
+  test: ^1.25.6

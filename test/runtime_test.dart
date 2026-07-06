@@ -1,0 +1,230 @@
+import 'package:nasp_lua_runtime/nasp_lua_runtime.dart';
+import 'package:test/test.dart';
+
+const _runtime = LuaScriptRuntime();
+
+Map<String, Object?> _schedulingInput({int horizon = 3}) => {
+      'timezone': 'Europe/Stockholm',
+      'study_window': {
+        'start': '2026-01-01T00:00:00Z',
+        'end': '2026-12-31T00:00:00Z',
+      },
+      'settings': {
+        'id': 's1',
+        'scope': 'study',
+        'version': 1,
+        'state': 'published',
+        'rule': {
+          'frequency': 'daily',
+          'times': ['09:00'],
+        },
+      },
+      'enrolment_date': '2026-01-01T00:00:00Z',
+      'now': '2026-06-01T00:00:00Z',
+      'horizon_days': horizon,
+    };
+
+Map<String, Object?> _qsInput() => {
+      'participant_id': 'p1',
+      'trigger': {'time': '2026-06-01T09:00:00Z', 'tag': 'morning'},
+      'question_sets': [
+        {'id': 'set1', 'name': 'Daily', 'state': 'published'},
+      ],
+      'questions': [
+        {
+          'id': 'q1',
+          'question_set_id': 'set1',
+          'type': 'scale',
+          'tags': ['mood'],
+          'set_position': 1,
+        },
+        {
+          'id': 'q2',
+          'question_set_id': 'set1',
+          'type': 'scale',
+          'tags': ['sleep'],
+          'set_position': 2,
+        },
+      ],
+      'answer_history': <Object?>[],
+      'seed': 42,
+    };
+
+void main() {
+  group('scheduling part', () {
+    const src = r'''
+function schedule(input)
+  local out = { triggers = {} }
+  local base = input.now
+  for i = 0, input.horizon_days - 1 do
+    out.triggers[i + 1] = { trigger_at = base + i * 86400, tag = "morning" }
+  end
+  out.regenerate_after = base + input.horizon_days * 86400
+  return out
+end
+''';
+
+    test('computes tagged triggers over the horizon', () {
+      final r = _runtime.run(ScriptKind.scheduling, src, _schedulingInput());
+      expect(r.ok, isTrue, reason: r.error?.toString());
+      final triggers = r.output!['triggers'] as List;
+      expect(triggers.length, 3);
+      final base = DateTime.parse('2026-06-01T00:00:00Z');
+      expect((triggers[0] as Map)['trigger_at'],
+          isA<DateTime>());
+      expect(((triggers[0] as Map)['trigger_at'] as DateTime)
+          .millisecondsSinceEpoch, base.millisecondsSinceEpoch);
+      expect((triggers[0] as Map)['tag'], 'morning');
+      expect(((triggers[2] as Map)['trigger_at'] as DateTime)
+          .millisecondsSinceEpoch,
+          base.add(const Duration(days: 2)).millisecondsSinceEpoch);
+      expect((r.output!['regenerate_after'] as DateTime).millisecondsSinceEpoch,
+          base.add(const Duration(days: 3)).millisecondsSinceEpoch);
+    });
+
+    test('is deterministic across repeat runs', () {
+      final a = _runtime.run(ScriptKind.scheduling, src, _schedulingInput());
+      final b = _runtime.run(ScriptKind.scheduling, src, _schedulingInput());
+      expect(scriptValueToJson(a.output), scriptValueToJson(b.output));
+    });
+  });
+
+  group('question_selection part', () {
+    const src = r'''
+function select_questions(input)
+  local out = { items = {} }
+  for i, q in ipairs(input.questions) do
+    out.items[i] = { id = q.id, kind = "question" }
+  end
+  out.reason = "all in order"
+  return out
+end
+''';
+
+    test('returns ordered items with an enum kind', () {
+      final r = _runtime.run(ScriptKind.questionSelection, src, _qsInput());
+      expect(r.ok, isTrue, reason: r.error?.toString());
+      final items = r.output!['items'] as List;
+      expect(items.length, 2);
+      expect((items[0] as Map)['id'], 'q1');
+      expect((items[0] as Map)['kind'], 'question');
+      expect((items[1] as Map)['id'], 'q2');
+      expect(r.output!['reason'], 'all in order');
+    });
+  });
+
+  group('determinism of seeded random()', () {
+    const src = r'''
+function select_questions(input)
+  local out = { items = {} }
+  local n = #input.questions
+  local pick = random(n)
+  out.items[1] = { id = input.questions[pick].id, kind = "question" }
+  out.reason = "pick=" .. pick
+  return out
+end
+''';
+
+    test('same seed => identical output', () {
+      final a =
+          _runtime.run(ScriptKind.questionSelection, src, _qsInput(), seed: 7);
+      final b =
+          _runtime.run(ScriptKind.questionSelection, src, _qsInput(), seed: 7);
+      expect(a.ok && b.ok, isTrue, reason: a.error?.toString());
+      expect(scriptValueToJson(a.output), scriptValueToJson(b.output));
+    });
+  });
+
+  group('error taxonomy', () {
+    test('compile error for invalid source', () {
+      final r = _runtime.run(
+          ScriptKind.scheduling, 'function schedule(input) this is broken',
+          _schedulingInput());
+      expect(r.ok, isFalse);
+      expect(r.error!.type, ScriptErrorType.compile);
+    });
+
+    test('inputInvalid before Lua runs', () {
+      final bad = _schedulingInput()..remove('timezone');
+      final r = _runtime.run(ScriptKind.scheduling, 'function schedule() end',
+          bad);
+      expect(r.error!.type, ScriptErrorType.inputInvalid);
+      expect(r.error!.path, 'timezone');
+    });
+
+    test('outputInvalid for a wrong-shaped return', () {
+      const src = r'''
+function schedule(input) return { triggers = "nope" } end
+''';
+      final r = _runtime.run(ScriptKind.scheduling, src, _schedulingInput());
+      expect(r.error!.type, ScriptErrorType.outputInvalid);
+      expect(r.error!.path, 'triggers');
+    });
+
+    test('runtime error is attributed to the part', () {
+      const src = r'''
+function schedule(input) error("boom") end
+''';
+      final r = _runtime.run(ScriptKind.scheduling, src, _schedulingInput());
+      expect(r.error!.type, ScriptErrorType.runtime);
+      expect(r.error!.part, ScriptKind.scheduling);
+    });
+  });
+
+  group('sandbox', () {
+    test('ambient os is not reachable', () {
+      const src = r'''
+function schedule(input)
+  return { triggers = { { trigger_at = os.time() } } }
+end
+''';
+      final r = _runtime.run(ScriptKind.scheduling, src, _schedulingInput());
+      expect(r.ok, isFalse);
+      expect(r.error!.type, ScriptErrorType.runtime);
+    });
+
+    test('now() returns the host clock, not the wall clock', () {
+      const src = r'''
+function schedule(input)
+  return { triggers = { { trigger_at = now(), tag = "n" } } }
+end
+''';
+      final now = DateTime.parse('2030-03-03T03:03:03Z');
+      final r = _runtime.run(ScriptKind.scheduling, src, _schedulingInput(),
+          now: now);
+      expect(r.ok, isTrue, reason: r.error?.toString());
+      final t = ((r.output!['triggers'] as List)[0] as Map)['trigger_at']
+          as DateTime;
+      expect(t.millisecondsSinceEpoch,
+          (now.millisecondsSinceEpoch ~/ 1000) * 1000);
+    });
+  });
+
+  group('budgets', () {
+    test('host-call budget aborts a runaway loop', () {
+      const src = r'''
+function schedule(input)
+  for i = 1, 1000000 do log("x") end
+  return { triggers = {} }
+end
+''';
+      final r = _runtime.run(ScriptKind.scheduling, src, _schedulingInput(),
+          budget: const RuntimeBudget(maxHostCalls: 50));
+      expect(r.ok, isFalse);
+      expect(r.error!.type, ScriptErrorType.budgetExceeded);
+    });
+
+    test('log() is captured into the trace', () {
+      const src = r'''
+function schedule(input)
+  log("hello")
+  log("world")
+  return { triggers = {} }
+end
+''';
+      final r = _runtime.run(ScriptKind.scheduling, src, _schedulingInput());
+      expect(r.ok, isTrue, reason: r.error?.toString());
+      expect(r.trace, ['hello', 'world']);
+    });
+  });
+}
