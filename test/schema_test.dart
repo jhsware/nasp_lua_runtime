@@ -114,4 +114,68 @@ void main() {
       expect(ScriptKind.fromId('nope'), isNull);
     });
   });
+
+  group('scheduling study_length_days', () {
+    Schema schedInput() => contractFor(ScriptKind.scheduling)!.input;
+
+    Map<String, Object?> validSched() => {
+          'timezone': 'Europe/Stockholm',
+          'study_window': {
+            'start': '2026-01-01T00:00:00Z',
+            'end': '2026-12-31T00:00:00Z',
+          },
+          'settings': {
+            'id': 's1',
+            'scope': 'study',
+            'version': 1,
+            'state': 'published',
+            'rule': <String, Object?>{},
+          },
+          'enrolment_date': '2026-01-01T00:00:00Z',
+          'now': '2026-06-01T00:00:00Z',
+          'horizon_days': 7,
+        };
+
+    test('is optional — input without it still validates', () {
+      final out = schedInput()
+          .validate(validSched(), part: ScriptKind.scheduling, input: true);
+      expect(out.containsKey('study_length_days'), isFalse);
+    });
+
+    test('present value is coerced through', () {
+      final input = validSched()..['study_length_days'] = 7;
+      final out = schedInput()
+          .validate(input, part: ScriptKind.scheduling, input: true);
+      expect(out['study_length_days'], 7);
+    });
+
+    test('explicit null is accepted and behaves like absent', () {
+      final input = validSched()..['study_length_days'] = null;
+      final out = schedInput()
+          .validate(input, part: ScriptKind.scheduling, input: true);
+      expect(out['study_length_days'], isNull);
+    });
+
+    test('zero is rejected (min 1) with a path-qualified error', () {
+      final input = validSched()..['study_length_days'] = 0;
+      expect(
+        () => schedInput()
+            .validate(input, part: ScriptKind.scheduling, input: true),
+        throwsA(isA<ScriptError>()
+            .having((e) => e.type, 'type', ScriptErrorType.inputInvalid)
+            .having((e) => e.path, 'path', 'study_length_days')),
+      );
+    });
+
+    test('descriptor lists study_length_days as optional int min 1', () {
+      final fields = (contractFor(ScriptKind.scheduling)!.toJson()['input']
+          as Map)['fields'] as List;
+      final field = fields
+          .firstWhere((f) => (f as Map)['name'] == 'study_length_days') as Map;
+      expect((field['type'] as Map)['type'], 'int');
+      expect(field['required'], isFalse);
+      expect(field['nullable'], isTrue);
+      expect((field['constraint'] as Map)['min'], 1);
+    });
+  });
 }

@@ -87,6 +87,26 @@ end
       final b = _runtime.run(ScriptKind.scheduling, src, _schedulingInput());
       expect(scriptValueToJson(a.output), scriptValueToJson(b.output));
     });
+
+    test('exposes study_length_days to the script when present', () {
+      const withLength = r'''
+function schedule(input)
+  return {
+    triggers = {
+      { trigger_at = input.now + input.study_length_days * 86400, tag = "end" },
+    },
+  }
+end
+''';
+      final input = _schedulingInput()..['study_length_days'] = 5;
+      final r = _runtime.run(ScriptKind.scheduling, withLength, input);
+      expect(r.ok, isTrue, reason: r.error?.toString());
+      final t = ((r.output!['triggers'] as List)[0] as Map)['trigger_at']
+          as DateTime;
+      final base = DateTime.parse('2026-06-01T00:00:00Z');
+      expect(t.millisecondsSinceEpoch,
+          base.add(const Duration(days: 5)).millisecondsSinceEpoch);
+    });
   });
 
   group('question_selection part', () {
