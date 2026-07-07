@@ -3,7 +3,12 @@
 /// Decide *when* to prompt a participant. Input is the participant's timezone,
 /// the study window, the resolved schedule settings/rule (the same object the
 /// `nasp_scheduling` domain versions — its `rule` is opaque JSON), the
-/// enrolment date, the current wall-clock `now`, and the horizon to plan.
+/// enrolment date, the current wall-clock `now`, the horizon to plan, and an
+/// optional participant-relative study length. When `study_length_days` is
+/// given, the participant's effective study end is
+/// `enrolment_date + study_length_days`, clamped to `study_window.end`; when it
+/// is omitted, `study_window.end` remains the effective end as before. Hosts
+/// must not schedule triggers past the effective end.
 /// Output is an ordered list of tagged trigger times plus an optional
 /// `regenerate_after` hint.
 library;
@@ -41,6 +46,11 @@ final ContractDescriptor schedulingContract = ContractDescriptor(
     Field('enrolment_date', TypeSpec.timestamp()),
     Field('now', TypeSpec.timestamp()),
     Field('horizon_days', TypeSpec.integer(), constraint: const Constraint(min: 1)),
+    // Optional participant-relative study length. Effective study end =
+    // enrolment_date + study_length_days, clamped to study_window.end; when
+    // omitted the effective end is study_window.end. Additive, non-breaking.
+    Field('study_length_days', TypeSpec.integer(),
+        required: false, nullable: true, constraint: const Constraint(min: 1)),
   ]),
   output: Schema([
     Field(
