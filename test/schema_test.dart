@@ -109,6 +109,23 @@ void main() {
       expect(json['kind'], 'follow_up');
       expect(json['io_contract_version'], 1);
       expect(ScriptKind.fromId('follow_up'), ScriptKind.followUp);
+      // Output is an optional/nullable follow_up object — absent/null means
+      // "no follow-up round".
+      final outFields = ((json['output'] as Map)['fields'] as List).cast<Map>();
+      final fu = outFields.firstWhere((f) => f['name'] == 'follow_up');
+      expect(fu['required'], isFalse);
+      expect(fu['nullable'], isTrue);
+      // Distinguishing invariant: the follow_up input carries answer values.
+      final inFields = ((json['input'] as Map)['fields'] as List).cast<Map>();
+      final currentRound =
+          inFields.firstWhere((f) => f['name'] == 'current_round');
+      final roundFields =
+          ((currentRound['type'] as Map)['fields'] as List).cast<Map>();
+      final answers = roundFields.firstWhere((f) => f['name'] == 'answers');
+      final answerFields =
+          (((answers['type'] as Map)['element'] as Map)['fields'] as List)
+              .cast<Map>();
+      expect(answerFields.map((f) => f['name']), contains('values'));
     });
 
     test('registry covers every kind', () {
