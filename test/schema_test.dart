@@ -101,6 +101,32 @@ void main() {
       expect(d.toJson()['kind'], 'question_selection');
     });
 
+    test('follow_up descriptor', () {
+      final d = contractFor(ScriptKind.followUp)!;
+      expect(d.entrypoint, 'follow_up');
+      expect(d.ioContractVersion, 1);
+      final json = d.toJson();
+      expect(json['kind'], 'follow_up');
+      expect(json['io_contract_version'], 1);
+      // Output is an optional/nullable follow_up object — absent/null means
+      // "no follow-up round".
+      final outFields = ((json['output'] as Map)['fields'] as List).cast<Map>();
+      final fu = outFields.firstWhere((f) => f['name'] == 'follow_up');
+      expect(fu['required'], isFalse);
+      expect(fu['nullable'], isTrue);
+      // Distinguishing invariant: the follow_up input carries answer values.
+      final inFields = ((json['input'] as Map)['fields'] as List).cast<Map>();
+      final currentRound =
+          inFields.firstWhere((f) => f['name'] == 'current_round');
+      final roundFields =
+          ((currentRound['type'] as Map)['fields'] as List).cast<Map>();
+      final answers = roundFields.firstWhere((f) => f['name'] == 'answers');
+      final answerFields =
+          (((answers['type'] as Map)['element'] as Map)['fields'] as List)
+              .cast<Map>();
+      expect(answerFields.map((f) => f['name']), contains('values'));
+    });
+
     test('registry covers every kind', () {
       for (final k in ScriptKind.values) {
         expect(contractFor(k), isNotNull, reason: 'no contract for ${k.id}');
