@@ -50,6 +50,58 @@ Map<String, Object?> _qsInput() => {
       'seed': 42,
     };
 
+Map<String, Object?> _followUpInput() => {
+      'participant_id': 'p1',
+      'now': '2026-06-01T09:05:00Z',
+      'current_round': {
+        'scheduled_at': '2026-06-01T09:00:00Z',
+        'answered_at': '2026-06-01T09:05:00Z',
+        'delta_seconds': 300,
+        'type': 'beep',
+        'tag': 'morning',
+        'answers': [
+          {
+            'question_id': 'q1',
+            'values': ['3', 'high'],
+            'answered_at': '2026-06-01T09:05:00Z',
+          },
+        ],
+      },
+      'recent_rounds': [
+        {
+          'scheduled_at': '2026-05-31T09:00:00Z',
+          'answered_at': '2026-05-31T09:02:00Z',
+          'delta_seconds': 120,
+          'type': 'beep',
+          'tag': 'morning',
+          'answers': [
+            {
+              'question_id': 'q1',
+              'values': ['2'],
+              'answered_at': '2026-05-31T09:02:00Z',
+            },
+          ],
+        },
+      ],
+      'schedule': [
+        {
+          'trigger_at': '2026-06-01T09:00:00Z',
+          'tag': 'morning',
+          'type': 'beep',
+          'answered': true,
+          'answered_at': '2026-06-01T09:05:00Z',
+          'delta_seconds': 300,
+        },
+        {
+          'trigger_at': '2026-06-02T09:00:00Z',
+          'tag': 'morning',
+          'type': 'beep',
+          'answered': false,
+        },
+      ],
+      'seed': 42,
+    };
+
 void main() {
   group('scheduling part', () {
     const src = r'''
@@ -245,6 +297,70 @@ end
       final r = _runtime.run(ScriptKind.scheduling, src, _schedulingInput());
       expect(r.ok, isTrue, reason: r.error?.toString());
       expect(r.trace, ['hello', 'world']);
+    });
+  });
+
+  group('follow_up part', () {
+    test('runs, sees answer values, and returns {} for no follow-up', () {
+      const src = r'''
+function follow_up(input)
+  log("value=" .. input.current_round.answers[1].values[1])
+  return {}
+end
+''';
+      final r = _runtime.run(ScriptKind.followUp, src, _followUpInput());
+      expect(r.ok, isTrue, reason: r.error?.toString());
+      expect(r.trace, ['value=3']); // answer values reach the script
+      expect(r.output!['follow_up'], isNull); // null/absent => no follow-up
+    });
+
+    test('returns a follow_up trigger with a typed DateTime', () {
+      const src = r'''
+function follow_up(input)
+  return { follow_up = { trigger_at = input.now + 3600, tag = "followup" } }
+end
+''';
+      final r = _runtime.run(ScriptKind.followUp, src, _followUpInput());
+      expect(r.ok, isTrue, reason: r.error?.toString());
+      final fu = r.output!['follow_up'] as Map;
+      expect(fu['trigger_at'], isA<DateTime>());
+      expect(fu['tag'], 'followup');
+      final now = DateTime.parse('2026-06-01T09:05:00Z');
+      expect((fu['trigger_at'] as DateTime).millisecondsSinceEpoch,
+          now.add(const Duration(hours: 1)).millisecondsSinceEpoch);
+    });
+
+    test('a follow_up missing trigger_at is outputInvalid', () {
+      const src = r'''
+function follow_up(input)
+  return { follow_up = { tag = "x" } }
+end
+''';
+      final r = _runtime.run(ScriptKind.followUp, src, _followUpInput());
+      expect(r.ok, isFalse);
+      expect(r.error!.type, ScriptErrorType.outputInvalid);
+      expect(r.error!.path, 'follow_up.trigger_at');
+    });
+
+    test('input missing current_round is inputInvalid', () {
+      final bad = _followUpInput()..remove('current_round');
+      final r = _runtime.run(
+          ScriptKind.followUp, 'function follow_up(input) end', bad);
+      expect(r.ok, isFalse);
+      expect(r.error!.type, ScriptErrorType.inputInvalid);
+      expect(r.error!.path, 'current_round');
+    });
+
+    test('an invalid round type is rejected by the enumeration', () {
+      final bad = _followUpInput();
+      final round = Map<String, Object?>.from(bad['current_round'] as Map);
+      round['type'] = 'other';
+      bad['current_round'] = round;
+      final r = _runtime.run(
+          ScriptKind.followUp, 'function follow_up(input) end', bad);
+      expect(r.ok, isFalse);
+      expect(r.error!.type, ScriptErrorType.inputInvalid);
+      expect(r.error!.path, 'current_round.type');
     });
   });
 }
