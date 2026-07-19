@@ -101,6 +101,16 @@ void main() {
       expect(d.toJson()['kind'], 'question_selection');
     });
 
+    test('follow_up descriptor', () {
+      final d = contractFor(ScriptKind.followUp)!;
+      expect(d.entrypoint, 'follow_up');
+      expect(d.ioContractVersion, 1);
+      final json = d.toJson();
+      expect(json['kind'], 'follow_up');
+      expect(json['io_contract_version'], 1);
+      expect(ScriptKind.fromId('follow_up'), ScriptKind.followUp);
+    });
+
     test('registry covers every kind', () {
       for (final k in ScriptKind.values) {
         expect(contractFor(k), isNotNull, reason: 'no contract for ${k.id}');
