@@ -50,6 +50,50 @@ Map<String, Object?> _qsInput() => {
       'seed': 42,
     };
 
+/// One answered round; `type` is overridable so a test can push an invalid
+/// enum value. The `answers` list carries selected values per question — the
+/// distinguishing feature of the follow_up input.
+Map<String, Object?> _round({String type = 'beep', String tag = 'morning'}) => {
+      'scheduled_at': '2026-06-01T09:00:00Z',
+      'answered_at': '2026-06-01T09:05:00Z',
+      'delta_seconds': 300,
+      'type': type,
+      'tag': tag,
+      'answers': [
+        {
+          'question_id': 'q1',
+          'values': ['yes'],
+          'answered_at': '2026-06-01T09:05:00Z',
+        },
+      ],
+    };
+
+Map<String, Object?> _followUpInput() => {
+      'participant_id': 'p1',
+      'now': '2026-06-01T09:05:00Z',
+      'current_round': _round(),
+      'recent_rounds': [_round(tag: 'evening')],
+      'schedule': [
+        {
+          'trigger_at': '2026-06-01T09:00:00Z',
+          'tag': 'morning',
+          'type': 'beep',
+          'answered': true,
+          'answered_at': '2026-06-01T09:05:00Z',
+          'delta_seconds': 300,
+        },
+        // A future, not-yet-answered slot: the optional answered_at /
+        // delta_seconds are absent here.
+        {
+          'trigger_at': '2026-06-01T18:00:00Z',
+          'tag': 'evening',
+          'type': 'follow_up',
+          'answered': false,
+        },
+      ],
+      'seed': 7,
+    };
+
 void main() {
   group('scheduling part', () {
     const src = r'''
@@ -130,6 +174,68 @@ end
       expect((items[0] as Map)['kind'], 'question');
       expect((items[1] as Map)['id'], 'q2');
       expect(r.output!['reason'], 'all in order');
+    });
+  });
+
+  group('follow_up part', () {
+    test('runs on an answered round, sees answer values, no follow-up', () {
+      const src = r'''
+function follow_up(input)
+  log("val=" .. input.current_round.answers[1].values[1])
+  return {}
+end
+''';
+      final r = _runtime.run(ScriptKind.followUp, src, _followUpInput());
+      expect(r.ok, isTrue, reason: r.error?.toString());
+      // Answer values reach the script — the only kind for which they do.
+      expect(r.trace, contains('val=yes'));
+      // An empty return means "no follow-up round".
+      expect(r.output!['follow_up'], isNull);
+    });
+
+    test('returns a follow-up round with a typed DateTime trigger_at', () {
+      const src = r'''
+function follow_up(input)
+  return { follow_up = { trigger_at = input.now + 3600, tag = "followup" } }
+end
+''';
+      final r = _runtime.run(ScriptKind.followUp, src, _followUpInput());
+      expect(r.ok, isTrue, reason: r.error?.toString());
+      final fu = r.output!['follow_up'] as Map;
+      expect(fu['trigger_at'], isA<DateTime>());
+      final expected =
+          DateTime.parse('2026-06-01T09:05:00Z').add(const Duration(hours: 1));
+      expect((fu['trigger_at'] as DateTime).millisecondsSinceEpoch,
+          expected.millisecondsSinceEpoch);
+      expect(fu['tag'], 'followup');
+    });
+
+    test('a follow-up object missing trigger_at is outputInvalid', () {
+      const src = r'''
+function follow_up(input)
+  return { follow_up = { tag = "x" } }
+end
+''';
+      final r = _runtime.run(ScriptKind.followUp, src, _followUpInput());
+      expect(r.ok, isFalse);
+      expect(r.error!.type, ScriptErrorType.outputInvalid);
+      expect(r.error!.path, 'follow_up.trigger_at');
+    });
+
+    test('missing current_round is inputInvalid before Lua runs', () {
+      final bad = _followUpInput()..remove('current_round');
+      final r =
+          _runtime.run(ScriptKind.followUp, 'function follow_up() end', bad);
+      expect(r.error!.type, ScriptErrorType.inputInvalid);
+      expect(r.error!.path, 'current_round');
+    });
+
+    test('an unknown round type is rejected by the enumeration', () {
+      final bad = _followUpInput()..['current_round'] = _round(type: 'other');
+      final r =
+          _runtime.run(ScriptKind.followUp, 'function follow_up() end', bad);
+      expect(r.error!.type, ScriptErrorType.inputInvalid);
+      expect(r.error!.path, 'current_round.type');
     });
   });
 
