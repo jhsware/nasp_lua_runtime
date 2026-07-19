@@ -6,9 +6,11 @@ library;
 
 import '../errors.dart';
 import '../schema.dart';
+import 'follow_up.dart';
 import 'question_selection.dart';
 import 'scheduling.dart';
 
+export 'follow_up.dart';
 export 'question_selection.dart';
 export 'scheduling.dart';
 
@@ -17,6 +19,7 @@ final Map<ScriptKind, ContractDescriptor> scriptContracts =
     Map.unmodifiable(<ScriptKind, ContractDescriptor>{
   ScriptKind.scheduling: schedulingContract,
   ScriptKind.questionSelection: questionSelectionContract,
+  ScriptKind.followUp: followUpContract,
 });
 
 /// The contract descriptor for [kind], or null if the host has none.
