@@ -14,7 +14,10 @@ enum ScriptKind {
   scheduling('scheduling'),
 
   /// Decide which question(s)/set to present at a given trigger.
-  questionSelection('question_selection');
+  questionSelection('question_selection'),
+
+  /// Decide whether an answered round triggers a follow-up round (now or later).
+  followUp('follow_up');
 
   const ScriptKind(this.id);
 
