@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0
+
+- Schema wire-shape parsing: `Schema.fromJson`, `TypeSpec.fromJson`,
+  `Field.fromJson`, `Constraint.fromJson` — the exact inverse of the frozen
+  descriptor JSON, with path-qualified `FormatException`s on malformed input.
+  Enables hosts to accept and validate against bundle-declared schemas
+  (script settings schemas).
+- `Field.defaultValue`: optional, additive `default` key in the descriptor
+  wire shape. Advisory (form prefill); the validator does not apply it.
+  Descriptors without defaults serialise byte-identically to 0.3.0.
+
 ## 0.1.0
 
 - Initial release, extracted from the `nasp_waves_server` workspace bootstrap.

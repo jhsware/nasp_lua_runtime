@@ -205,4 +205,120 @@ void main() {
       expect((field['constraint'] as Map)['min'], 1);
     });
   });
+
+  group('wire-shape parsing (Schema.fromJson)', () {
+    test('round-trips a schema with every scalar type and constraints', () {
+      final schema = Schema([
+        Field('flag', TypeSpec.boolean(), defaultValue: true),
+        Field('count', TypeSpec.integer(),
+            constraint: const Constraint(min: 0, max: 10), defaultValue: 3),
+        Field('ratio', TypeSpec.doubleValue(), required: false),
+        Field('label', TypeSpec.string(),
+            constraint: const Constraint(nonEmpty: true)),
+        Field('mode', TypeSpec.enumeration(['a', 'b']), defaultValue: 'a'),
+        Field('start', TypeSpec.timestamp()),
+        Field('tags', TypeSpec.list(TypeSpec.string()), required: false),
+        Field('extra', TypeSpec.json(), required: false, nullable: true),
+      ]);
+      final parsed = Schema.fromJson(schema.toJson());
+      expect(parsed.toJson(), schema.toJson());
+    });
+
+    test('round-trips nested objects and maps', () {
+      final schema = Schema([
+        Field(
+          'window',
+          TypeSpec.object([
+            Field('start', TypeSpec.timestamp()),
+            Field('end', TypeSpec.timestamp()),
+          ]),
+        ),
+        Field('meta', TypeSpec.map(TypeSpec.string()), required: false),
+      ]);
+      expect(Schema.fromJson(schema.toJson()).toJson(), schema.toJson());
+    });
+
+    test('a parsed schema validates values', () {
+      final parsed = Schema.fromJson(Schema([
+        Field('interval_days', TypeSpec.integer(),
+            constraint: const Constraint(min: 1)),
+      ]).toJson());
+      final out = parsed.validate({'interval_days': 2},
+          part: ScriptKind.scheduling, input: true);
+      expect(out['interval_days'], 2);
+      expect(
+        () => parsed.validate({'interval_days': 0},
+            part: ScriptKind.scheduling, input: true),
+        throwsA(isA<ScriptError>()
+            .having((e) => e.path, 'path', 'interval_days')),
+      );
+      expect(
+        () => parsed.validate({'interval_days': 'x'},
+            part: ScriptKind.scheduling, input: true),
+        throwsA(isA<ScriptError>()
+            .having((e) => e.path, 'path', 'interval_days')),
+      );
+    });
+
+    test('default is carried on the wire and optional', () {
+      final json = Schema([
+        Field('count', TypeSpec.integer(), defaultValue: 5),
+        Field('label', TypeSpec.string()),
+      ]).toJson();
+      final fields = (json['fields'] as List).cast<Map>();
+      expect(fields[0]['default'], 5);
+      expect(fields[1].containsKey('default'), isFalse);
+      final parsed = Schema.fromJson(json);
+      expect(parsed.fields[0].defaultValue, 5);
+      expect(parsed.fields[1].defaultValue, isNull);
+    });
+
+    test('rejects malformed descriptors with path-qualified messages', () {
+      expect(() => Schema.fromJson(null), throwsFormatException);
+      expect(() => Schema.fromJson({'type': 'int'}), throwsFormatException);
+      expect(
+        () => Schema.fromJson({'type': 'object'}),
+        throwsA(isA<FormatException>()
+            .having((e) => e.message, 'message', contains('fields'))),
+      );
+      expect(
+        () => Schema.fromJson({
+          'type': 'object',
+          'fields': [
+            {'name': 'x', 'type': {'type': 'nope'}},
+          ],
+        }),
+        throwsA(isA<FormatException>().having(
+            (e) => e.message, 'message', contains('.fields[0].type'))),
+      );
+      expect(
+        () => Schema.fromJson({
+          'type': 'object',
+          'fields': [
+            {'name': '', 'type': {'type': 'int'}},
+          ],
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => Schema.fromJson({
+          'type': 'object',
+          'fields': [
+            {'name': 'mode', 'type': {'type': 'enum', 'values': []}},
+          ],
+        }),
+        throwsFormatException,
+      );
+    });
+
+    test('contract descriptors survive a parse round-trip', () {
+      for (final kind in ScriptKind.values) {
+        final d = contractFor(kind)!;
+        expect(Schema.fromJson(d.toJson()['input']).toJson(),
+            d.input.toJson());
+        expect(Schema.fromJson(d.toJson()['output']).toJson(),
+            d.output.toJson());
+      }
+    });
+  });
 }
