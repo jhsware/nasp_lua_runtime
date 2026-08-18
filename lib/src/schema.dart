@@ -33,7 +33,6 @@ enum SchemaType {
   /// losslessly in both directions but not field-type-checked.
   json,
 }
-
 /// A (possibly nested) type in the schema tree.
 class TypeSpec {
   TypeSpec._(this.type, {this.element, this.value, this.fields, this.enumValues});
@@ -64,6 +63,59 @@ class TypeSpec {
   TypeSpec.map(TypeSpec value) : this._(SchemaType.map, value: value);
   TypeSpec.object(List<Field> fields)
       : this._(SchemaType.object, fields: fields);
+
+  /// Parse a type node of the frozen descriptor wire shape (the inverse of
+  /// [toJson]). Throws [FormatException] with a path-qualified message when
+  /// [json] is not a valid descriptor node.
+  factory TypeSpec.fromJson(Object? json, {String path = ''}) {
+    if (json is! Map) {
+      throw FormatException(_at(path, 'expected a type object'));
+    }
+    final name = json['type'];
+    if (name is! String) {
+      throw FormatException(_at(path, 'missing "type"'));
+    }
+    switch (name) {
+      case 'bool':
+        return TypeSpec.boolean();
+      case 'int':
+        return TypeSpec.integer();
+      case 'double':
+        return TypeSpec.doubleValue();
+      case 'string':
+        return TypeSpec.string();
+      case 'timestamp':
+        return TypeSpec.timestamp();
+      case 'json':
+        return TypeSpec.json();
+      case 'enum':
+        final values = json['values'];
+        if (values is! List ||
+            values.isEmpty ||
+            values.any((v) => v is! String)) {
+          throw FormatException(
+              _at(path, 'enum requires non-empty string "values"'));
+        }
+        return TypeSpec.enumeration(values.cast<String>());
+      case 'list':
+        return TypeSpec.list(
+            TypeSpec.fromJson(json['element'], path: '$path.element'));
+      case 'map':
+        return TypeSpec.map(
+            TypeSpec.fromJson(json['value'], path: '$path.value'));
+      case 'object':
+        final fields = json['fields'];
+        if (fields is! List) {
+          throw FormatException(_at(path, 'object requires "fields"'));
+        }
+        return TypeSpec.object([
+          for (var i = 0; i < fields.length; i++)
+            Field.fromJson(fields[i], path: '$path.fields[$i]'),
+        ]);
+      default:
+        throw FormatException(_at(path, 'unknown type "$name"'));
+    }
+  }
 
   /// Short name used in descriptor JSON and error messages.
   String get wireName {
@@ -116,6 +168,10 @@ class TypeSpec {
   }
 }
 
+/// Prefix [message] with the descriptor [path] when one is set.
+String _at(String path, String message) =>
+    path.isEmpty ? message : '$path: $message';
+
 /// An optional per-field constraint (§4.2: "range, non-empty, allowed values").
 class Constraint {
   const Constraint({this.min, this.max, this.nonEmpty = false});
@@ -128,6 +184,31 @@ class Constraint {
 
   /// For strings and lists: the value must be non-empty.
   final bool nonEmpty;
+
+  /// Parse a constraint of the frozen descriptor wire shape (the inverse of
+  /// [toJson]). Throws [FormatException] on a malformed node.
+  factory Constraint.fromJson(Object? json, {String path = ''}) {
+    if (json is! Map) {
+      throw FormatException(_at(path, 'expected a constraint object'));
+    }
+    final min = json['min'];
+    final max = json['max'];
+    final nonEmpty = json['non_empty'];
+    if (min != null && min is! num) {
+      throw FormatException(_at(path, '"min" must be a number'));
+    }
+    if (max != null && max is! num) {
+      throw FormatException(_at(path, '"max" must be a number'));
+    }
+    if (nonEmpty != null && nonEmpty is! bool) {
+      throw FormatException(_at(path, '"non_empty" must be a bool'));
+    }
+    return Constraint(
+      min: min as num?,
+      max: max as num?,
+      nonEmpty: nonEmpty == true,
+    );
+  }
 
   Map<String, Object?> toJson() => {
         if (min != null) 'min': min,
@@ -144,6 +225,7 @@ class Field {
     this.required = true,
     this.nullable = false,
     this.constraint,
+    this.defaultValue,
   });
 
   final String name;
@@ -157,12 +239,50 @@ class Field {
 
   final Constraint? constraint;
 
+  /// Optional default value, serialised as `default` in the descriptor.
+  ///
+  /// Advisory: a form can prefill from it; the validator does not apply it.
+  /// Additive to the frozen wire shape — absent for every field that has
+  /// none, so pre-existing descriptors are byte-identical.
+  final Object? defaultValue;
+
+  /// Parse a field of the frozen descriptor wire shape (the inverse of
+  /// [toJson]). Throws [FormatException] on a malformed node.
+  factory Field.fromJson(Object? json, {String path = ''}) {
+    if (json is! Map) {
+      throw FormatException(_at(path, 'expected a field object'));
+    }
+    final name = json['name'];
+    if (name is! String || name.isEmpty) {
+      throw FormatException(_at(path, 'field requires a non-empty "name"'));
+    }
+    final required = json['required'];
+    if (required != null && required is! bool) {
+      throw FormatException(_at(path, '"required" must be a bool'));
+    }
+    final nullable = json['nullable'];
+    if (nullable != null && nullable is! bool) {
+      throw FormatException(_at(path, '"nullable" must be a bool'));
+    }
+    return Field(
+      name,
+      TypeSpec.fromJson(json['type'], path: '$path.type'),
+      required: required != false,
+      nullable: nullable == true,
+      constraint: json['constraint'] == null
+          ? null
+          : Constraint.fromJson(json['constraint'], path: '$path.constraint'),
+      defaultValue: json['default'],
+    );
+  }
+
   Map<String, Object?> toJson() => {
         'name': name,
         'type': type.toJson(),
         'required': required,
         'nullable': nullable,
         if (constraint != null) 'constraint': constraint!.toJson(),
+        if (defaultValue != null) 'default': defaultValue,
       };
 }
 
@@ -171,6 +291,18 @@ class Schema {
   const Schema(this.fields);
 
   final List<Field> fields;
+
+  /// Parse a schema of the frozen descriptor wire shape — an
+  /// `{type: object, fields: [...]}` node, exactly what [toJson] emits.
+  /// Throws [FormatException] with a path-qualified message on malformed
+  /// input (callers on the write path convert this to a 400).
+  factory Schema.fromJson(Object? json) {
+    final spec = TypeSpec.fromJson(json);
+    if (spec.type != SchemaType.object) {
+      throw const FormatException('schema root must be {type: object, ...}');
+    }
+    return Schema(spec.fields!);
+  }
 
   /// This schema expressed as a [TypeSpec] (an object type).
   TypeSpec get asType => TypeSpec.object(fields);
