@@ -22,6 +22,24 @@ const int schedulingContractVersion = 1;
 /// The global Lua function the runtime invokes: `schedule(input) -> output`.
 const String schedulingEntrypoint = 'schedule';
 
+/// The resolved schedule settings object every kind can receive: the same
+/// object the `nasp_scheduling` domain versions; its `rule` is opaque JSON
+/// carrying the script-specific settings (BASSET). Required on the
+/// `scheduling` input; optional (additive, non-breaking) on
+/// `question_selection` and `follow_up`, where the server hosts supply it so
+/// selection and follow-up decisions can read `settings.rule` too.
+TypeSpec resolvedSettingsSpec() => TypeSpec.object([
+      Field('id', TypeSpec.string()),
+      Field('scope', TypeSpec.string()),
+      Field('study_id', TypeSpec.string(), required: false, nullable: true),
+      Field('participant_id', TypeSpec.string(),
+          required: false, nullable: true),
+      Field('version', TypeSpec.integer()),
+      Field('state', TypeSpec.string()),
+      // The resolved rule is free-form JSON owned by nasp_scheduling.
+      Field('rule', TypeSpec.json()),
+    ]);
+
 /// The frozen `scheduling` contract descriptor.
 final ContractDescriptor schedulingContract = ContractDescriptor(
   kind: ScriptKind.scheduling,
@@ -33,16 +51,7 @@ final ContractDescriptor schedulingContract = ContractDescriptor(
       Field('start', TypeSpec.timestamp()),
       Field('end', TypeSpec.timestamp()),
     ])),
-    Field('settings', TypeSpec.object([
-      Field('id', TypeSpec.string()),
-      Field('scope', TypeSpec.string()),
-      Field('study_id', TypeSpec.string(), required: false, nullable: true),
-      Field('participant_id', TypeSpec.string(), required: false, nullable: true),
-      Field('version', TypeSpec.integer()),
-      Field('state', TypeSpec.string()),
-      // The resolved rule is free-form JSON owned by nasp_scheduling.
-      Field('rule', TypeSpec.json()),
-    ])),
+    Field('settings', resolvedSettingsSpec()),
     Field('enrolment_date', TypeSpec.timestamp()),
     Field('now', TypeSpec.timestamp()),
     Field('horizon_days', TypeSpec.integer(), constraint: const Constraint(min: 1)),

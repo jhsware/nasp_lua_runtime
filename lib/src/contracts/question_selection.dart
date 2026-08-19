@@ -3,12 +3,15 @@
 /// Decide *what* to present at a trigger. Input is the participant id, the
 /// trigger's time and tag, the in-scope question sets/questions (ids + light
 /// metadata mirroring `nasp_questionnaire`), the recent answer history (ids +
-/// timestamps), and a seed for host-provided randomness. Output is the ordered
-/// list of question/set ids to present plus an optional `reason`.
+/// timestamps), the resolved schedule settings (optional; the server hosts
+/// supply it so selection can read `settings.rule` — additive, non-breaking),
+/// and a seed for host-provided randomness. Output is the ordered list of
+/// question/set ids to present plus an optional `reason`.
 library;
 
 import '../errors.dart';
 import '../schema.dart';
+import 'scheduling.dart' show resolvedSettingsSpec;
 
 /// Contract revision (§4.5). Bump only on a breaking change.
 const int questionSelectionContractVersion = 1;
@@ -44,6 +47,10 @@ final ContractDescriptor questionSelectionContract = ContractDescriptor(
       Field('question_id', TypeSpec.string()),
       Field('answered_at', TypeSpec.timestamp()),
     ]))),
+    // The resolved schedule settings (settings.rule = script-specific
+    // settings). Optional — additive, non-breaking; the server hosts always
+    // supply it, legacy hosts may omit it.
+    Field('settings', resolvedSettingsSpec(), required: false, nullable: true),
     Field('seed', TypeSpec.integer()),
   ]),
   output: Schema([

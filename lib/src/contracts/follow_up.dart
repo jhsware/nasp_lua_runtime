@@ -19,6 +19,7 @@ library;
 
 import '../errors.dart';
 import '../schema.dart';
+import 'scheduling.dart' show resolvedSettingsSpec;
 
 /// Contract revision (§4.5). Bump only on a breaking change.
 const int followUpContractVersion = 1;
@@ -77,6 +78,10 @@ final ContractDescriptor followUpContract = ContractDescriptor(
       Field('delta_seconds', TypeSpec.integer(),
           required: false, nullable: true),
     ]))),
+    // The resolved schedule settings (settings.rule = script-specific
+    // settings). Optional — additive, non-breaking; the server hosts always
+    // supply it, legacy hosts may omit it.
+    Field('settings', resolvedSettingsSpec(), required: false, nullable: true),
     Field('seed', TypeSpec.integer()),
   ]),
   output: Schema([

@@ -183,6 +183,50 @@ end
       expect((items[1] as Map)['id'], 'q2');
       expect(r.output!['reason'], 'all in order');
     });
+
+    test('exposes settings.rule to the script when present', () {
+      const withSettings = r'''
+function select_questions(input)
+  local rule = input.settings.rule or {}
+  local max = rule.max_questions or #input.questions
+  local out = { items = {} }
+  for i = 1, max do
+    out.items[i] = { id = input.questions[i].id, kind = "question" }
+  end
+  return out
+end
+''';
+      final input = _qsInput()
+        ..['settings'] = {
+          'id': 's1',
+          'scope': 'participant',
+          'participant_id': 'p1',
+          'version': 2,
+          'state': 'published',
+          'rule': {'max_questions': 1},
+        };
+      final r = _runtime.run(ScriptKind.questionSelection, withSettings, input);
+      expect(r.ok, isTrue, reason: r.error?.toString());
+      final items = r.output!['items'] as List;
+      expect(items.length, 1);
+      expect((items[0] as Map)['id'], 'q1');
+    });
+
+    test('settings stays optional: an input without it is still valid', () {
+      const readsSettings = r'''
+function select_questions(input)
+  local out = { items = {} }
+  if input.settings == nil then
+    out.reason = "no settings"
+  end
+  return out
+end
+''';
+      final r =
+          _runtime.run(ScriptKind.questionSelection, readsSettings, _qsInput());
+      expect(r.ok, isTrue, reason: r.error?.toString());
+      expect(r.output!['reason'], 'no settings');
+    });
   });
 
   group('determinism of seeded random()', () {
@@ -313,6 +357,34 @@ end
       expect(r.trace, ['value=3']); // answer values reach the script
       expect(r.output!['follow_up'], isNull); // null/absent => no follow-up
     });
+    test('exposes settings.rule to the script when present', () {
+      const src = r'''
+function follow_up(input)
+  local rule = input.settings.rule or {}
+  if rule.follow_up_delay_seconds == nil then return {} end
+  return { follow_up = {
+    trigger_at = input.now + rule.follow_up_delay_seconds,
+    tag = "fu",
+  } }
+end
+''';
+      final input = _followUpInput()
+        ..['settings'] = {
+          'id': 's1',
+          'scope': 'study',
+          'study_id': 'study1',
+          'version': 1,
+          'state': 'published',
+          'rule': {'follow_up_delay_seconds': 600},
+        };
+      final r = _runtime.run(ScriptKind.followUp, src, input);
+      expect(r.ok, isTrue, reason: r.error?.toString());
+      final fu = r.output!['follow_up'] as Map;
+      final now = DateTime.parse('2026-06-01T09:05:00Z');
+      expect((fu['trigger_at'] as DateTime).millisecondsSinceEpoch,
+          now.add(const Duration(minutes: 10)).millisecondsSinceEpoch);
+    });
+
 
     test('returns a follow_up trigger with a typed DateTime', () {
       const src = r'''

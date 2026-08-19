@@ -4,7 +4,7 @@ description: >-
   LuaScriptRuntime, the per-kind typed I/O contracts + validator, and the
   Dart<->Lua marshalling. Byte-identical on the server (simulation) and the
   mobile app (execution). No Flutter, no FFI, no native build.
-version: 0.4.0
+version: 0.5.0
 publish_to: none
 
 environment:
