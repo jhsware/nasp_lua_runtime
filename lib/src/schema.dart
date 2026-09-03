@@ -226,6 +226,7 @@ class Field {
     this.nullable = false,
     this.constraint,
     this.defaultValue,
+    this.description,
   });
 
   final String name;
@@ -246,6 +247,17 @@ class Field {
   /// none, so pre-existing descriptors are byte-identical.
   final Object? defaultValue;
 
+  /// Author-facing prose for this field, serialised as `description` in the
+  /// descriptor.
+  ///
+  /// Advisory: never used by the validator. Used by the bundle-declared
+  /// settings schema so a script author can document their own settings
+  /// keys; kind contracts leave it unset (their documentation lives in the
+  /// server's input reference). Additive to the frozen wire shape — absent
+  /// for every field that has none, so pre-existing descriptors are
+  /// byte-identical.
+  final String? description;
+
   /// Parse a field of the frozen descriptor wire shape (the inverse of
   /// [toJson]). Throws [FormatException] on a malformed node.
   factory Field.fromJson(Object? json, {String path = ''}) {
@@ -264,6 +276,10 @@ class Field {
     if (nullable != null && nullable is! bool) {
       throw FormatException(_at(path, '"nullable" must be a bool'));
     }
+    final description = json['description'];
+    if (description != null && description is! String) {
+      throw FormatException(_at(path, '"description" must be a string'));
+    }
     return Field(
       name,
       TypeSpec.fromJson(json['type'], path: '$path.type'),
@@ -273,6 +289,7 @@ class Field {
           ? null
           : Constraint.fromJson(json['constraint'], path: '$path.constraint'),
       defaultValue: json['default'],
+      description: description as String?,
     );
   }
 
@@ -283,6 +300,7 @@ class Field {
         'nullable': nullable,
         if (constraint != null) 'constraint': constraint!.toJson(),
         if (defaultValue != null) 'default': defaultValue,
+        if (description != null) 'description': description,
       };
 }
 

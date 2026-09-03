@@ -3,104 +3,157 @@ import 'package:test/test.dart';
 
 const _runtime = LuaScriptRuntime();
 
+// Fixtures follow contract v2: `study` (study variables), `settings` (the
+// resolved script settings), `signals` (participant-specific data) and the
+// top-level invocation values (`now`, `seed`, `trigger`).
+
 Map<String, Object?> _schedulingInput({int horizon = 3}) => {
-      'timezone': 'Europe/Stockholm',
-      'study_window': {
-        'start': '2026-01-01T00:00:00Z',
-        'end': '2026-12-31T00:00:00Z',
+      'study': <String, Object?>{
+        'timezone': 'Europe/Stockholm',
+        'window': <String, Object?>{
+          'start': '2026-01-01T00:00:00Z',
+          'end': '2026-12-31T00:00:00Z',
+        },
+        'horizon_days': horizon,
       },
-      'settings': {
+      'settings': <String, Object?>{
         'id': 's1',
         'scope': 'study',
         'version': 1,
         'state': 'published',
-        'rule': {
+        'rule': <String, Object?>{
           'frequency': 'daily',
           'times': ['09:00'],
         },
       },
-      'enrolment_date': '2026-01-01T00:00:00Z',
+      'signals': <String, Object?>{
+        'participant_id': 'p1',
+        'enrolment_date': '2026-01-01T00:00:00Z',
+      },
       'now': '2026-06-01T00:00:00Z',
-      'horizon_days': horizon,
     };
 
 Map<String, Object?> _qsInput() => {
-      'participant_id': 'p1',
-      'trigger': {'time': '2026-06-01T09:00:00Z', 'tag': 'morning'},
-      'question_sets': [
-        {'id': 'set1', 'name': 'Daily', 'state': 'published'},
-      ],
-      'questions': [
-        {
-          'id': 'q1',
-          'question_set_id': 'set1',
-          'type': 'scale',
-          'tags': ['mood'],
-          'set_position': 1,
-        },
-        {
-          'id': 'q2',
-          'question_set_id': 'set1',
-          'type': 'scale',
-          'tags': ['sleep'],
-          'set_position': 2,
-        },
-      ],
-      'answer_history': <Object?>[],
+      'study': <String, Object?>{
+        'question_sets': [
+          {'id': 'set1', 'name': 'Daily', 'state': 'published'},
+        ],
+        'questions': [
+          {
+            'id': 'q1',
+            'question_set_id': 'set1',
+            'type': 'scale',
+            'tags': ['mood'],
+            'set_position': 1,
+          },
+          {
+            'id': 'q2',
+            'question_set_id': 'set1',
+            'type': 'scale',
+            'tags': ['sleep'],
+            'set_position': 2,
+          },
+        ],
+      },
+      'signals': <String, Object?>{
+        'participant_id': 'p1',
+        'answers': <Object?>[],
+      },
+      'trigger': <String, Object?>{
+        'time': '2026-06-01T09:00:00Z',
+        'tag': 'morning',
+      },
       'seed': 42,
     };
 
 Map<String, Object?> _followUpInput() => {
-      'participant_id': 'p1',
-      'now': '2026-06-01T09:05:00Z',
-      'current_round': {
-        'scheduled_at': '2026-06-01T09:00:00Z',
-        'answered_at': '2026-06-01T09:05:00Z',
-        'delta_seconds': 300,
-        'type': 'beep',
-        'tag': 'morning',
-        'answers': [
-          {
-            'question_id': 'q1',
-            'values': ['3', 'high'],
-            'answered_at': '2026-06-01T09:05:00Z',
-          },
-        ],
-      },
-      'recent_rounds': [
-        {
-          'scheduled_at': '2026-05-31T09:00:00Z',
-          'answered_at': '2026-05-31T09:02:00Z',
-          'delta_seconds': 120,
+      'signals': <String, Object?>{
+        'participant_id': 'p1',
+        'current_round': <String, Object?>{
+          'scheduled_at': '2026-06-01T09:00:00Z',
+          'answered_at': '2026-06-01T09:05:00Z',
+          'delta_seconds': 300,
           'type': 'beep',
           'tag': 'morning',
           'answers': [
             {
               'question_id': 'q1',
-              'values': ['2'],
-              'answered_at': '2026-05-31T09:02:00Z',
+              'values': ['3', 'high'],
+              'answered_at': '2026-06-01T09:05:00Z',
             },
           ],
         },
-      ],
-      'schedule': [
-        {
-          'trigger_at': '2026-06-01T09:00:00Z',
-          'tag': 'morning',
-          'type': 'beep',
-          'answered': true,
-          'answered_at': '2026-06-01T09:05:00Z',
-          'delta_seconds': 300,
-        },
-        {
-          'trigger_at': '2026-06-02T09:00:00Z',
-          'tag': 'morning',
-          'type': 'beep',
-          'answered': false,
-        },
-      ],
+        'recent_rounds': [
+          {
+            'scheduled_at': '2026-05-31T09:00:00Z',
+            'answered_at': '2026-05-31T09:02:00Z',
+            'delta_seconds': 120,
+            'type': 'beep',
+            'tag': 'morning',
+            'answers': [
+              {
+                'question_id': 'q1',
+                'values': ['2'],
+                'answered_at': '2026-05-31T09:02:00Z',
+              },
+            ],
+          },
+        ],
+        'schedule': [
+          {
+            'trigger_at': '2026-06-01T09:00:00Z',
+            'tag': 'morning',
+            'type': 'beep',
+            'answered': true,
+            'answered_at': '2026-06-01T09:05:00Z',
+            'delta_seconds': 300,
+          },
+          {
+            'trigger_at': '2026-06-02T09:00:00Z',
+            'tag': 'morning',
+            'type': 'beep',
+            'answered': false,
+          },
+        ],
+      },
+      'now': '2026-06-01T09:05:00Z',
       'seed': 42,
     };
+
+// The flat contract-v1 shapes, kept only to prove v2 rejects them cleanly.
+
+Map<String, Object?> _schedulingInputV1() => {
+      'timezone': 'Europe/Stockholm',
+      'study_window': {
+        'start': '2026-01-01T00:00:00Z',
+        'end': '2026-12-31T00:00:00Z',
+      },
+      'settings': _schedulingInput()['settings'],
+      'enrolment_date': '2026-01-01T00:00:00Z',
+      'now': '2026-06-01T00:00:00Z',
+      'horizon_days': 3,
+    };
+
+Map<String, Object?> _qsInputV1() => {
+      'participant_id': 'p1',
+      'trigger': {'time': '2026-06-01T09:00:00Z', 'tag': 'morning'},
+      'question_sets': (_qsInput()['study'] as Map)['question_sets'],
+      'questions': (_qsInput()['study'] as Map)['questions'],
+      'answer_history': <Object?>[],
+      'seed': 42,
+    };
+
+Map<String, Object?> _followUpInputV1() => {
+      'participant_id': 'p1',
+      'now': '2026-06-01T09:05:00Z',
+      'current_round': (_followUpInput()['signals'] as Map)['current_round'],
+      'recent_rounds': (_followUpInput()['signals'] as Map)['recent_rounds'],
+      'schedule': (_followUpInput()['signals'] as Map)['schedule'],
+      'seed': 42,
+    };
+
+Map<String, Object?> _group(Map<String, Object?> input, String name) =>
+    input[name] as Map<String, Object?>;
 
 void main() {
   group('scheduling part', () {
@@ -108,10 +161,10 @@ void main() {
 function schedule(input)
   local out = { triggers = {} }
   local base = input.now
-  for i = 0, input.horizon_days - 1 do
+  for i = 0, input.study.horizon_days - 1 do
     out.triggers[i + 1] = { trigger_at = base + i * 86400, tag = "morning" }
   end
-  out.regenerate_after = base + input.horizon_days * 86400
+  out.regenerate_after = base + input.study.horizon_days * 86400
   return out
 end
 ''';
@@ -140,17 +193,18 @@ end
       expect(scriptValueToJson(a.output), scriptValueToJson(b.output));
     });
 
-    test('exposes study_length_days to the script when present', () {
+    test('exposes study.length_days to the script when present', () {
       const withLength = r'''
 function schedule(input)
   return {
     triggers = {
-      { trigger_at = input.now + input.study_length_days * 86400, tag = "end" },
+      { trigger_at = input.now + input.study.length_days * 86400, tag = "end" },
     },
   }
 end
 ''';
-      final input = _schedulingInput()..['study_length_days'] = 5;
+      final input = _schedulingInput();
+      _group(input, 'study')['length_days'] = 5;
       final r = _runtime.run(ScriptKind.scheduling, withLength, input);
       expect(r.ok, isTrue, reason: r.error?.toString());
       final t = ((r.output!['triggers'] as List)[0] as Map)['trigger_at']
@@ -159,13 +213,29 @@ end
       expect(t.millisecondsSinceEpoch,
           base.add(const Duration(days: 5)).millisecondsSinceEpoch);
     });
+
+    test('exposes signals.participant_id and signals.enrolment_date', () {
+      const src = r'''
+function schedule(input)
+  log(input.signals.participant_id)
+  return { triggers = { { trigger_at = input.signals.enrolment_date } } }
+end
+''';
+      final r = _runtime.run(ScriptKind.scheduling, src, _schedulingInput());
+      expect(r.ok, isTrue, reason: r.error?.toString());
+      expect(r.trace, ['p1']);
+      final t = ((r.output!['triggers'] as List)[0] as Map)['trigger_at']
+          as DateTime;
+      expect(t.millisecondsSinceEpoch,
+          DateTime.parse('2026-01-01T00:00:00Z').millisecondsSinceEpoch);
+    });
   });
 
   group('question_selection part', () {
     const src = r'''
 function select_questions(input)
   local out = { items = {} }
-  for i, q in ipairs(input.questions) do
+  for i, q in ipairs(input.study.questions) do
     out.items[i] = { id = q.id, kind = "question" }
   end
   out.reason = "all in order"
@@ -188,10 +258,10 @@ end
       const withSettings = r'''
 function select_questions(input)
   local rule = input.settings.rule or {}
-  local max = rule.max_questions or #input.questions
+  local max = rule.max_questions or #input.study.questions
   local out = { items = {} }
   for i = 1, max do
-    out.items[i] = { id = input.questions[i].id, kind = "question" }
+    out.items[i] = { id = input.study.questions[i].id, kind = "question" }
   end
   return out
 end
@@ -227,15 +297,31 @@ end
       expect(r.ok, isTrue, reason: r.error?.toString());
       expect(r.output!['reason'], 'no settings');
     });
+
+    test('exposes signals.participant_id and signals.answers', () {
+      const src = r'''
+function select_questions(input)
+  log(input.signals.participant_id .. ":" .. #input.signals.answers)
+  return { items = {} }
+end
+''';
+      final input = _qsInput();
+      _group(input, 'signals')['answers'] = [
+        {'question_id': 'q1', 'answered_at': '2026-05-31T09:02:00Z'},
+      ];
+      final r = _runtime.run(ScriptKind.questionSelection, src, input);
+      expect(r.ok, isTrue, reason: r.error?.toString());
+      expect(r.trace, ['p1:1']);
+    });
   });
 
   group('determinism of seeded random()', () {
     const src = r'''
 function select_questions(input)
   local out = { items = {} }
-  local n = #input.questions
+  local n = #input.study.questions
   local pick = random(n)
-  out.items[1] = { id = input.questions[pick].id, kind = "question" }
+  out.items[1] = { id = input.study.questions[pick].id, kind = "question" }
   out.reason = "pick=" .. pick
   return out
 end
@@ -261,11 +347,12 @@ end
     });
 
     test('inputInvalid before Lua runs', () {
-      final bad = _schedulingInput()..remove('timezone');
+      final bad = _schedulingInput();
+      _group(bad, 'study').remove('timezone');
       final r = _runtime.run(ScriptKind.scheduling, 'function schedule() end',
           bad);
       expect(r.error!.type, ScriptErrorType.inputInvalid);
-      expect(r.error!.path, 'timezone');
+      expect(r.error!.path, 'study.timezone');
     });
 
     test('outputInvalid for a wrong-shaped return', () {
@@ -348,7 +435,7 @@ end
     test('runs, sees answer values, and returns {} for no follow-up', () {
       const src = r'''
 function follow_up(input)
-  log("value=" .. input.current_round.answers[1].values[1])
+  log("value=" .. input.signals.current_round.answers[1].values[1])
   return {}
 end
 ''';
@@ -385,6 +472,18 @@ end
           now.add(const Duration(minutes: 10)).millisecondsSinceEpoch);
     });
 
+    test('exposes signals.recent_rounds and signals.schedule', () {
+      const src = r'''
+function follow_up(input)
+  log(input.signals.participant_id .. ":" .. #input.signals.recent_rounds
+      .. ":" .. #input.signals.schedule)
+  return {}
+end
+''';
+      final r = _runtime.run(ScriptKind.followUp, src, _followUpInput());
+      expect(r.ok, isTrue, reason: r.error?.toString());
+      expect(r.trace, ['p1:1:2']);
+    });
 
     test('returns a follow_up trigger with a typed DateTime', () {
       const src = r'''
@@ -414,25 +513,94 @@ end
       expect(r.error!.path, 'follow_up.trigger_at');
     });
 
-    test('input missing current_round is inputInvalid', () {
-      final bad = _followUpInput()..remove('current_round');
+    test('input missing signals.current_round is inputInvalid', () {
+      final bad = _followUpInput();
+      _group(bad, 'signals').remove('current_round');
       final r = _runtime.run(
           ScriptKind.followUp, 'function follow_up(input) end', bad);
       expect(r.ok, isFalse);
       expect(r.error!.type, ScriptErrorType.inputInvalid);
-      expect(r.error!.path, 'current_round');
+      expect(r.error!.path, 'signals.current_round');
     });
 
     test('an invalid round type is rejected by the enumeration', () {
       final bad = _followUpInput();
-      final round = Map<String, Object?>.from(bad['current_round'] as Map);
+      final signals = _group(bad, 'signals');
+      final round = Map<String, Object?>.from(signals['current_round'] as Map);
       round['type'] = 'other';
-      bad['current_round'] = round;
+      signals['current_round'] = round;
       final r = _runtime.run(
           ScriptKind.followUp, 'function follow_up(input) end', bad);
       expect(r.ok, isFalse);
       expect(r.error!.type, ScriptErrorType.inputInvalid);
-      expect(r.error!.path, 'current_round.type');
+      expect(r.error!.path, 'signals.current_round.type');
+    });
+  });
+
+  group('contract v2', () {
+    const expectedInputFields = <ScriptKind, List<String>>{
+      ScriptKind.scheduling: ['study', 'settings', 'signals', 'now'],
+      ScriptKind.questionSelection: [
+        'study',
+        'settings',
+        'signals',
+        'trigger',
+        'seed',
+      ],
+      ScriptKind.followUp: ['settings', 'signals', 'now', 'seed'],
+    };
+
+    test('every kind is io_contract_version 2 with the grouped input', () {
+      for (final kind in ScriptKind.values) {
+        final d = contractFor(kind)!;
+        expect(d.ioContractVersion, 2, reason: kind.id);
+        final json = d.toJson();
+        expect(json['io_contract_version'], 2, reason: kind.id);
+        final names = ((json['input'] as Map)['fields'] as List)
+            .map((f) => (f as Map)['name'])
+            .toList();
+        expect(names, expectedInputFields[kind], reason: kind.id);
+      }
+    });
+
+    test('a v1-shaped scheduling input is inputInvalid at `study`', () {
+      final r = _runtime.run(ScriptKind.scheduling,
+          'function schedule(input) return { triggers = {} } end',
+          _schedulingInputV1());
+      expect(r.ok, isFalse);
+      expect(r.error!.type, ScriptErrorType.inputInvalid);
+      expect(r.error!.path, 'study');
+    });
+
+    test('a v1-shaped question_selection input is inputInvalid at `study`',
+        () {
+      final r = _runtime.run(ScriptKind.questionSelection,
+          'function select_questions(input) return { items = {} } end',
+          _qsInputV1());
+      expect(r.ok, isFalse);
+      expect(r.error!.type, ScriptErrorType.inputInvalid);
+      expect(r.error!.path, 'study');
+    });
+
+    test('a v1-shaped follow_up input is inputInvalid at `signals`', () {
+      final r = _runtime.run(ScriptKind.followUp,
+          'function follow_up(input) return {} end', _followUpInputV1());
+      expect(r.ok, isFalse);
+      expect(r.error!.type, ScriptErrorType.inputInvalid);
+      expect(r.error!.path, 'signals');
+    });
+
+    test('a missing group is rejected before Lua runs, never as a nil error',
+        () {
+      // The script would raise "attempt to index a nil value" if the
+      // validator let a v1 input through; the error must be inputInvalid.
+      final r = _runtime.run(ScriptKind.scheduling, r'''
+function schedule(input)
+  return { triggers = { { trigger_at = input.now + input.study.horizon_days } } }
+end
+''', _schedulingInputV1());
+      expect(r.error!.type, ScriptErrorType.inputInvalid);
+      expect(r.error!.path, 'study');
     });
   });
 }

@@ -86,10 +86,10 @@ void main() {
     test('scheduling descriptor', () {
       final d = contractFor(ScriptKind.scheduling)!;
       expect(d.entrypoint, 'schedule');
-      expect(d.ioContractVersion, 1);
+      expect(d.ioContractVersion, 2);
       final json = d.toJson();
       expect(json['kind'], 'scheduling');
-      expect(json['io_contract_version'], 1);
+      expect(json['io_contract_version'], 2);
       expect((json['input'] as Map)['type'], 'object');
       expect((json['output'] as Map)['type'], 'object');
     });
@@ -97,17 +97,17 @@ void main() {
     test('question_selection descriptor', () {
       final d = contractFor(ScriptKind.questionSelection)!;
       expect(d.entrypoint, 'select_questions');
-      expect(d.ioContractVersion, 1);
+      expect(d.ioContractVersion, 2);
       expect(d.toJson()['kind'], 'question_selection');
     });
 
     test('follow_up descriptor', () {
       final d = contractFor(ScriptKind.followUp)!;
       expect(d.entrypoint, 'follow_up');
-      expect(d.ioContractVersion, 1);
+      expect(d.ioContractVersion, 2);
       final json = d.toJson();
       expect(json['kind'], 'follow_up');
-      expect(json['io_contract_version'], 1);
+      expect(json['io_contract_version'], 2);
       expect(ScriptKind.fromId('follow_up'), ScriptKind.followUp);
       // Output is an optional/nullable follow_up object — absent/null means
       // "no follow-up round".
@@ -115,10 +115,14 @@ void main() {
       final fu = outFields.firstWhere((f) => f['name'] == 'follow_up');
       expect(fu['required'], isFalse);
       expect(fu['nullable'], isTrue);
-      // Distinguishing invariant: the follow_up input carries answer values.
+      // Distinguishing invariant: the follow_up input carries answer values
+      // (under the `signals` group in contract v2).
       final inFields = ((json['input'] as Map)['fields'] as List).cast<Map>();
+      final signals = inFields.firstWhere((f) => f['name'] == 'signals');
+      final signalFields =
+          ((signals['type'] as Map)['fields'] as List).cast<Map>();
       final currentRound =
-          inFields.firstWhere((f) => f['name'] == 'current_round');
+          signalFields.firstWhere((f) => f['name'] == 'current_round');
       final roundFields =
           ((currentRound['type'] as Map)['fields'] as List).cast<Map>();
       final answers = roundFields.firstWhere((f) => f['name'] == 'answers');
@@ -140,69 +144,140 @@ void main() {
       }
       expect(ScriptKind.fromId('nope'), isNull);
     });
+
+    test('no contract field carries a description (prose lives server-side)',
+        () {
+      bool hasDescription(Map<String, Object?> node) {
+        if (node.containsKey('description')) return true;
+        final fields = node['fields'];
+        if (fields is List) {
+          for (final f in fields) {
+            if (hasDescription((f as Map).cast<String, Object?>())) return true;
+            if (hasDescription((f['type'] as Map).cast<String, Object?>())) {
+              return true;
+            }
+          }
+        }
+        final element = node['element'];
+        if (element is Map && hasDescription(element.cast<String, Object?>())) {
+          return true;
+        }
+        final value = node['value'];
+        if (value is Map && hasDescription(value.cast<String, Object?>())) {
+          return true;
+        }
+        return false;
+      }
+
+      for (final k in ScriptKind.values) {
+        final json = contractFor(k)!.toJson();
+        expect(hasDescription((json['input'] as Map).cast<String, Object?>()),
+            isFalse,
+            reason: '${k.id} input');
+        expect(hasDescription((json['output'] as Map).cast<String, Object?>()),
+            isFalse,
+            reason: '${k.id} output');
+      }
+    });
   });
 
-  group('scheduling study_length_days', () {
+  group('scheduling study.length_days', () {
     Schema schedInput() => contractFor(ScriptKind.scheduling)!.input;
 
     Map<String, Object?> validSched() => {
-          'timezone': 'Europe/Stockholm',
-          'study_window': {
-            'start': '2026-01-01T00:00:00Z',
-            'end': '2026-12-31T00:00:00Z',
+          'study': <String, Object?>{
+            'timezone': 'Europe/Stockholm',
+            'window': <String, Object?>{
+              'start': '2026-01-01T00:00:00Z',
+              'end': '2026-12-31T00:00:00Z',
+            },
+            'horizon_days': 7,
           },
-          'settings': {
+          'settings': <String, Object?>{
             'id': 's1',
             'scope': 'study',
             'version': 1,
             'state': 'published',
             'rule': <String, Object?>{},
           },
-          'enrolment_date': '2026-01-01T00:00:00Z',
+          'signals': <String, Object?>{
+            'participant_id': 'p1',
+            'enrolment_date': '2026-01-01T00:00:00Z',
+          },
           'now': '2026-06-01T00:00:00Z',
-          'horizon_days': 7,
         };
+
+    Map<String, Object?> study(Map<String, Object?> input) =>
+        input['study'] as Map<String, Object?>;
 
     test('is optional — input without it still validates', () {
       final out = schedInput()
           .validate(validSched(), part: ScriptKind.scheduling, input: true);
-      expect(out.containsKey('study_length_days'), isFalse);
+      expect(study(out).containsKey('length_days'), isFalse);
     });
 
     test('present value is coerced through', () {
-      final input = validSched()..['study_length_days'] = 7;
+      final input = validSched();
+      study(input)['length_days'] = 7;
       final out = schedInput()
           .validate(input, part: ScriptKind.scheduling, input: true);
-      expect(out['study_length_days'], 7);
+      expect(study(out)['length_days'], 7);
     });
 
     test('explicit null is accepted and behaves like absent', () {
-      final input = validSched()..['study_length_days'] = null;
+      final input = validSched();
+      study(input)['length_days'] = null;
       final out = schedInput()
           .validate(input, part: ScriptKind.scheduling, input: true);
-      expect(out['study_length_days'], isNull);
+      expect(study(out)['length_days'], isNull);
     });
 
     test('zero is rejected (min 1) with a path-qualified error', () {
-      final input = validSched()..['study_length_days'] = 0;
+      final input = validSched();
+      study(input)['length_days'] = 0;
       expect(
         () => schedInput()
             .validate(input, part: ScriptKind.scheduling, input: true),
         throwsA(isA<ScriptError>()
             .having((e) => e.type, 'type', ScriptErrorType.inputInvalid)
-            .having((e) => e.path, 'path', 'study_length_days')),
+            .having((e) => e.path, 'path', 'study.length_days')),
       );
     });
 
-    test('descriptor lists study_length_days as optional int min 1', () {
+    test('descriptor lists study.length_days as optional int min 1', () {
       final fields = (contractFor(ScriptKind.scheduling)!.toJson()['input']
           as Map)['fields'] as List;
-      final field = fields
-          .firstWhere((f) => (f as Map)['name'] == 'study_length_days') as Map;
+      final studyField =
+          fields.firstWhere((f) => (f as Map)['name'] == 'study') as Map;
+      final studyFields = (studyField['type'] as Map)['fields'] as List;
+      final field = studyFields
+          .firstWhere((f) => (f as Map)['name'] == 'length_days') as Map;
       expect((field['type'] as Map)['type'], 'int');
       expect(field['required'], isFalse);
       expect(field['nullable'], isTrue);
       expect((field['constraint'] as Map)['min'], 1);
+    });
+
+    test('a missing signals group is reported at `signals`', () {
+      final input = validSched()..remove('signals');
+      expect(
+        () => schedInput()
+            .validate(input, part: ScriptKind.scheduling, input: true),
+        throwsA(isA<ScriptError>()
+            .having((e) => e.type, 'type', ScriptErrorType.inputInvalid)
+            .having((e) => e.path, 'path', 'signals')),
+      );
+    });
+
+    test('an empty signals.participant_id is rejected', () {
+      final input = validSched();
+      (input['signals'] as Map<String, Object?>)['participant_id'] = '';
+      expect(
+        () => schedInput()
+            .validate(input, part: ScriptKind.scheduling, input: true),
+        throwsA(isA<ScriptError>()
+            .having((e) => e.path, 'path', 'signals.participant_id')),
+      );
     });
   });
 
@@ -273,6 +348,64 @@ void main() {
       expect(parsed.fields[1].defaultValue, isNull);
     });
 
+    test('description round-trips through Field.fromJson / toJson', () {
+      final field = Field.fromJson({
+        'name': 'x',
+        'type': {'type': 'int'},
+        'description': 'how many',
+      });
+      expect(field.description, 'how many');
+      final json = field.toJson();
+      expect(json['description'], 'how many');
+      expect(Field.fromJson(json).toJson(), json);
+      // Through a whole schema too.
+      final schema = Schema([
+        Field('count', TypeSpec.integer(),
+            defaultValue: 3, description: 'How many prompts per day.'),
+      ]);
+      expect(Schema.fromJson(schema.toJson()).toJson(), schema.toJson());
+      expect(Schema.fromJson(schema.toJson()).fields[0].description,
+          'How many prompts per day.');
+    });
+
+    test('a field without a description has no description key', () {
+      final json = Field('x', TypeSpec.integer()).toJson();
+      expect(json.containsKey('description'), isFalse);
+      expect(json.keys.toList(), ['name', 'type', 'required', 'nullable']);
+      expect(Field.fromJson(json).description, isNull);
+    });
+
+    test('a non-string description is a path-qualified FormatException', () {
+      expect(
+        () => Field.fromJson({
+          'name': 'x',
+          'type': {'type': 'int'},
+          'description': 3,
+        }),
+        throwsA(isA<FormatException>()
+            .having((e) => e.message, 'message', contains('description'))),
+      );
+      expect(
+        () => Schema.fromJson({
+          'type': 'object',
+          'fields': [
+            {'name': 'x', 'type': {'type': 'int'}, 'description': 3},
+          ],
+        }),
+        throwsA(isA<FormatException>()
+            .having((e) => e.message, 'message', contains('.fields[0]'))
+            .having((e) => e.message, 'message', contains('description'))),
+      );
+    });
+
+    test('the validator ignores descriptions', () {
+      final schema = Schema([
+        Field('count', TypeSpec.integer(), description: 'ignored'),
+      ]);
+      final out = schema.validate({'count': 2},
+          part: ScriptKind.scheduling, input: true);
+      expect(out, {'count': 2});
+    });
     test('rejects malformed descriptors with path-qualified messages', () {
       expect(() => Schema.fromJson(null), throwsFormatException);
       expect(() => Schema.fromJson({'type': 'int'}), throwsFormatException);
