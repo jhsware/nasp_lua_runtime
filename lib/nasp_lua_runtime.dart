@@ -12,6 +12,10 @@
 ///    taxonomy (§6.4).
 ///  - The schema types ([Schema], [TypeSpec], [Field], [Constraint]) and the
 ///    per-kind [ContractDescriptor]s consumed by `GET /script-bundles/contracts`.
+///    Contract v2 groups every input by provenance: `study` (study
+///    variables), `settings` (the resolved script settings), `signals`
+///    (participant-specific data — anything participant-specific is a
+///    signal) and top-level invocation values (`now`, `seed`, `trigger`).
 library;
 
 export 'src/contracts/contracts.dart';
