@@ -1,13 +1,24 @@
 /// The `scheduling` kind contract (docs/design/scripting.md §4.3).
 ///
-/// Decide *when* to prompt a participant. Input is the participant's timezone,
-/// the study window, the resolved schedule settings/rule (the same object the
-/// `nasp_scheduling` domain versions — its `rule` is opaque JSON), the
-/// enrolment date, the current wall-clock `now`, the horizon to plan, and an
-/// optional participant-relative study length. When `study_length_days` is
-/// given, the participant's effective study end is
-/// `enrolment_date + study_length_days`, clamped to `study_window.end`; when it
-/// is omitted, `study_window.end` remains the effective end as before. Hosts
+/// Decide *when* to prompt a participant. The input is grouped by provenance
+/// (contract v2), so the structure itself tells a script author where each
+/// value comes from:
+///
+///  - `study` — study variables, the same for every participant of the study:
+///    the `timezone`, the study `window` (`start`/`end`), the `horizon_days`
+///    to plan ahead, and the optional participant-relative `length_days`.
+///  - `settings` — the resolved script settings: the same object the
+///    `nasp_scheduling` domain versions (its `rule` is opaque JSON). A
+///    participant-scope override wins over the study-scope settings.
+///  - `signals` — participant-specific data the script analyses. Today the
+///    participant's identity (`participant_id`) and `enrolment_date`; later
+///    device telemetry such as location and usage (additive). Anything
+///    participant-specific is a signal.
+///  - top-level — invocation values from the host: the wall-clock `now`.
+///
+/// When `study.length_days` is given, the participant's effective study end is
+/// `signals.enrolment_date + study.length_days`, clamped to `study.window.end`;
+/// when it is omitted, `study.window.end` remains the effective end. Hosts
 /// must not schedule triggers past the effective end.
 /// Output is an ordered list of tagged trigger times plus an optional
 /// `regenerate_after` hint.
@@ -17,7 +28,10 @@ import '../errors.dart';
 import '../schema.dart';
 
 /// Contract revision (§4.5). Bump only on a breaking change.
-const int schedulingContractVersion = 1;
+///
+/// 2 (0.6.0): grouped input — `study` / `settings` / `signals` / invocation
+/// values; `signals.participant_id` added.
+const int schedulingContractVersion = 2;
 
 /// The global Lua function the runtime invokes: `schedule(input) -> output`.
 const String schedulingEntrypoint = 'schedule';
@@ -46,20 +60,33 @@ final ContractDescriptor schedulingContract = ContractDescriptor(
   entrypoint: schedulingEntrypoint,
   ioContractVersion: schedulingContractVersion,
   input: Schema([
-    Field('timezone', TypeSpec.string(), constraint: const Constraint(nonEmpty: true)),
-    Field('study_window', TypeSpec.object([
-      Field('start', TypeSpec.timestamp()),
-      Field('end', TypeSpec.timestamp()),
+    // Study variables — the same for every participant of the study.
+    Field('study', TypeSpec.object([
+      Field('timezone', TypeSpec.string(),
+          constraint: const Constraint(nonEmpty: true)),
+      Field('window', TypeSpec.object([
+        Field('start', TypeSpec.timestamp()),
+        Field('end', TypeSpec.timestamp()),
+      ])),
+      Field('horizon_days', TypeSpec.integer(),
+          constraint: const Constraint(min: 1)),
+      // Optional participant-relative study length. Effective study end =
+      // signals.enrolment_date + study.length_days, clamped to
+      // study.window.end; when omitted the effective end is study.window.end.
+      Field('length_days', TypeSpec.integer(),
+          required: false, nullable: true, constraint: const Constraint(min: 1)),
     ])),
+    // The resolved script settings (participant-scope override wins over
+    // study scope).
     Field('settings', resolvedSettingsSpec()),
-    Field('enrolment_date', TypeSpec.timestamp()),
+    // Participant-specific data the script analyses.
+    Field('signals', TypeSpec.object([
+      Field('participant_id', TypeSpec.string(),
+          constraint: const Constraint(nonEmpty: true)),
+      Field('enrolment_date', TypeSpec.timestamp()),
+    ])),
+    // Invocation value from the host: the current wall-clock instant.
     Field('now', TypeSpec.timestamp()),
-    Field('horizon_days', TypeSpec.integer(), constraint: const Constraint(min: 1)),
-    // Optional participant-relative study length. Effective study end =
-    // enrolment_date + study_length_days, clamped to study_window.end; when
-    // omitted the effective end is study_window.end. Additive, non-breaking.
-    Field('study_length_days', TypeSpec.integer(),
-        required: false, nullable: true, constraint: const Constraint(min: 1)),
   ]),
   output: Schema([
     Field(
