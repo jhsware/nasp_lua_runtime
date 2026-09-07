@@ -18,8 +18,12 @@ component that must be **byte-identical** in every host that executes scripts
   descriptor served by `GET /script-bundles/contracts?kind=`.
 - The explicit **schema type + validator** (path-qualified errors) and total,
   lossless **Dart↔Lua marshalling** (timestamps ↔ epoch seconds, int/double
-  preserved). `Field.description` is an optional, advisory prose slot for
-  bundle-declared settings schemas.
+  preserved). `Field` carries three advisory slots for bundle-declared
+  settings schemas, all ignored by the validator: `description` (prose),
+  `from_question` (the enrolment question whose answer seeds the field, read
+  by the server's settings derivation), and `format` (a display hint for a
+  `string` field — `time` for `HH:mm`, `date` for `yyyy-MM-dd` — read by
+  client forms).
 
 ## Contract v2: grouped inputs
 
@@ -69,7 +73,7 @@ dependencies:
   nasp_lua_runtime:
     git:
       url: <this repository>
-      ref: v0.6.0
+      ref: v0.7.0
 ```
 
 The conformance test suite (`dart test`) is the acceptance gate for any future

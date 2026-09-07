@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.7.0
+
+Additive. Contract versions are unchanged — all three kinds stay
+`io_contract_version: 2`, and a descriptor that uses none of the new keys is
+byte-identical to its 0.6.0 form.
+
+- `Field.fromQuestion` (wire key `from_question`, a non-empty string). Names
+  the enrolment question whose answer seeds a settings field. Advisory: the
+  validator never reads it; the server's settings derivation does, to build a
+  participant's script settings from the enrolment questionnaire.
+- `Field.format` (wire key `format`, a non-empty string). A display hint for a
+  `string` field, so a client form can show the right control. Documented
+  values: `time` (an `HH:mm` clock time) and `date` (a `yyyy-MM-dd` calendar
+  date). Advisory: read by client forms, never by the validator.
+- `LuaScriptRuntime.version` now equals the package version. It was stuck at
+  `0.1.0` while the package was at `0.6.0`, which made a host's
+  `runtime_min_version` check wrong. `test/version_test.dart` reads
+  `pubspec.yaml` and asserts the two agree, so they cannot drift again.
+
 ## 0.6.0 — BREAKING — contract v2
 
 `io_contract_version` is now **2** for all three kinds (`scheduling`,

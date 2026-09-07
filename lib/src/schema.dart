@@ -227,6 +227,8 @@ class Field {
     this.constraint,
     this.defaultValue,
     this.description,
+    this.fromQuestion,
+    this.format,
   });
 
   final String name;
@@ -258,6 +260,24 @@ class Field {
   /// byte-identical.
   final String? description;
 
+  /// Id of the enrolment question whose answer seeds this settings field,
+  /// serialised as `from_question` in the descriptor.
+  ///
+  /// Advisory: never used by the validator. Read by the server's settings
+  /// derivation, which maps an enrolment answer onto a participant's script
+  /// settings. Additive to the frozen wire shape — absent for every field
+  /// that has none, so pre-existing descriptors are byte-identical.
+  final String? fromQuestion;
+
+  /// Display hint for a `string` field, serialised as `format` in the
+  /// descriptor. Documented values: `time` (an `HH:mm` clock time) and
+  /// `date` (a `yyyy-MM-dd` calendar date).
+  ///
+  /// Advisory: read by client forms, never by the validator. Additive to the
+  /// frozen wire shape — absent for every field that has none, so
+  /// pre-existing descriptors are byte-identical.
+  final String? format;
+
   /// Parse a field of the frozen descriptor wire shape (the inverse of
   /// [toJson]). Throws [FormatException] on a malformed node.
   factory Field.fromJson(Object? json, {String path = ''}) {
@@ -280,6 +300,17 @@ class Field {
     if (description != null && description is! String) {
       throw FormatException(_at(path, '"description" must be a string'));
     }
+    final fromQuestion = json['from_question'];
+    if (fromQuestion != null &&
+        (fromQuestion is! String || fromQuestion.isEmpty)) {
+      throw FormatException(
+        _at(path, '"from_question" must be a non-empty string'),
+      );
+    }
+    final format = json['format'];
+    if (format != null && (format is! String || format.isEmpty)) {
+      throw FormatException(_at(path, '"format" must be a non-empty string'));
+    }
     return Field(
       name,
       TypeSpec.fromJson(json['type'], path: '$path.type'),
@@ -290,6 +321,8 @@ class Field {
           : Constraint.fromJson(json['constraint'], path: '$path.constraint'),
       defaultValue: json['default'],
       description: description as String?,
+      fromQuestion: fromQuestion as String?,
+      format: format as String?,
     );
   }
 
@@ -301,6 +334,8 @@ class Field {
         if (constraint != null) 'constraint': constraint!.toJson(),
         if (defaultValue != null) 'default': defaultValue,
         if (description != null) 'description': description,
+        if (fromQuestion != null) 'from_question': fromQuestion,
+        if (format != null) 'format': format,
       };
 }
 

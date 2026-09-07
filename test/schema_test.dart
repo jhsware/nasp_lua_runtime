@@ -406,6 +406,121 @@ void main() {
           part: ScriptKind.scheduling, input: true);
       expect(out, {'count': 2});
     });
+
+    test('from_question and format round-trip through Field.fromJson / toJson',
+        () {
+      final field = Field.fromJson({
+        'name': 'wake_time',
+        'type': {'type': 'string'},
+        'from_question': 'q-wake',
+        'format': 'time',
+      });
+      expect(field.fromQuestion, 'q-wake');
+      expect(field.format, 'time');
+      final json = field.toJson();
+      expect(json['from_question'], 'q-wake');
+      expect(json['format'], 'time');
+      expect(Field.fromJson(json).toJson(), json);
+    });
+
+    test('a field without the new keys serialises without them', () {
+      final json = Field('x', TypeSpec.integer()).toJson();
+      expect(json.containsKey('from_question'), isFalse);
+      expect(json.containsKey('format'), isFalse);
+      expect(json.keys.toList(), ['name', 'type', 'required', 'nullable']);
+      final parsed = Field.fromJson(json);
+      expect(parsed.fromQuestion, isNull);
+      expect(parsed.format, isNull);
+    });
+
+    test('a malformed from_question or format is a path-qualified error', () {
+      expect(
+        () => Field.fromJson({
+          'name': 'x',
+          'type': {'type': 'string'},
+          'from_question': 42,
+        }),
+        throwsA(isA<FormatException>()
+            .having((e) => e.message, 'message', contains('from_question'))),
+      );
+      expect(
+        () => Schema.fromJson({
+          'type': 'object',
+          'fields': [
+            {
+              'name': 'x',
+              'type': {'type': 'string'},
+              'from_question': 42,
+            },
+          ],
+        }),
+        throwsA(isA<FormatException>()
+            .having((e) => e.message, 'message', contains('.fields[0]'))
+            .having((e) => e.message, 'message', contains('from_question'))),
+      );
+      expect(
+        () => Field.fromJson({
+          'name': 'x',
+          'type': {'type': 'string'},
+          'format': '',
+        }),
+        throwsA(isA<FormatException>()
+            .having((e) => e.message, 'message', contains('format'))),
+      );
+      expect(
+        () => Schema.fromJson({
+          'type': 'object',
+          'fields': [
+            {
+              'name': 'x',
+              'type': {'type': 'string'},
+              'format': '',
+            },
+          ],
+        }),
+        throwsA(isA<FormatException>()
+            .having((e) => e.message, 'message', contains('.fields[0]'))
+            .having((e) => e.message, 'message', contains('format'))),
+      );
+    });
+
+    test('the validator ignores from_question and format', () {
+      final schema = Schema([
+        Field('wake_time', TypeSpec.string(),
+            fromQuestion: 'q-wake', format: 'time'),
+      ]);
+      final out = schema.validate({'wake_time': '07:30'},
+          part: ScriptKind.scheduling, input: true);
+      expect(out, {'wake_time': '07:30'});
+      expect(
+        () => schema.validate({'wake_time': 730},
+            part: ScriptKind.scheduling, input: true),
+        throwsA(isA<ScriptError>()
+            .having((e) => e.type, 'type', ScriptErrorType.inputInvalid)
+            .having((e) => e.path, 'path', 'wake_time')),
+      );
+    });
+
+    test('a settings schema keeps both keys through the server normalisation',
+        () {
+      // The server normalises a bundle-declared settings schema with
+      // Schema.fromJson(raw).toJson(); the keys must survive that pass.
+      final schema = Schema([
+        Field('wake_time', TypeSpec.string(),
+            defaultValue: '07:30',
+            description: 'When the day starts.',
+            fromQuestion: 'q-wake',
+            format: 'time'),
+        Field('label', TypeSpec.string()),
+      ]);
+      final normalised = Schema.fromJson(schema.toJson());
+      expect(normalised.toJson(), schema.toJson());
+      expect(normalised.fields[0].fromQuestion, 'q-wake');
+      expect(normalised.fields[0].format, 'time');
+      expect(normalised.fields[1].fromQuestion, isNull);
+      expect(normalised.fields[1].format, isNull);
+    });
+
     test('rejects malformed descriptors with path-qualified messages', () {
       expect(() => Schema.fromJson(null), throwsFormatException);
       expect(() => Schema.fromJson({'type': 'int'}), throwsFormatException);
