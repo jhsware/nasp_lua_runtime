@@ -91,7 +91,12 @@ class LuaScriptRuntime {
   const LuaScriptRuntime();
 
   /// The runtime package version, matched against `runtime_min_version` (§3.3).
-  static const String version = '0.1.0';
+  ///
+  /// Must equal the `version:` field of `pubspec.yaml` — a host compares a
+  /// bundle's `runtime_min_version` against this constant to decide whether it
+  /// can execute the bundle. `test/version_test.dart` guards the two against
+  /// drift.
+  static const String version = '0.7.0';
 
   /// Execute one [kind] part.
   ///
