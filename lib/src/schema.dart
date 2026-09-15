@@ -33,6 +33,51 @@ enum SchemaType {
   /// losslessly in both directions but not field-type-checked.
   json,
 }
+
+/// The kind of a participant-editable settings field.
+///
+/// A settings field that a participant can edit in the mobile app has one of
+/// these six kinds. The kind follows from the shape of the field (see
+/// [Field.editKind]). The kind selects the edit widget in the backend app and
+/// in the mobile app.
+enum SettingsEditKind {
+  /// Type `int`. The bounds are numbers.
+  integer('integer'),
+
+  /// Type `double`. The bounds are numbers.
+  decimal('decimal'),
+
+  /// Type `string` with `format: time`. The bounds are `HH:mm` strings.
+  time('time'),
+
+  /// Type `string` with `format: date`. The bounds are `yyyy-MM-dd` strings.
+  date('date'),
+
+  /// Type `object` with `format: time_span` and exactly the `string` fields
+  /// `start` and `end`, each with `format: time`. The bounds are `HH:mm`
+  /// strings. They apply to `start` and to `end`. The span has no order
+  /// rule, so an overnight span such as 22:00-06:00 is valid.
+  timeSpan('time_span'),
+
+  /// Type `object` with `format: date_span` and exactly the `string` fields
+  /// `start` and `end`, each with `format: date`. The bounds are
+  /// `yyyy-MM-dd` strings. They apply to `start` and to `end`.
+  dateSpan('date_span');
+
+  const SettingsEditKind(this.wireName);
+
+  /// The name of this kind in docs, payloads and error messages.
+  final String wireName;
+
+  /// The kind with the wire name [name], or null when no kind has that name.
+  static SettingsEditKind? fromWireName(String name) {
+    for (final kind in values) {
+      if (kind.wireName == name) return kind;
+    }
+    return null;
+  }
+}
+
 /// A (possibly nested) type in the schema tree.
 class TypeSpec {
   TypeSpec._(this.type, {this.element, this.value, this.fields, this.enumValues});
@@ -172,6 +217,20 @@ class TypeSpec {
 String _at(String path, String message) =>
     path.isEmpty ? message : '$path: $message';
 
+/// True when [type] is an `object` with exactly the `string` fields `start`
+/// and `end`, and each part has `format` equal to [partFormat].
+bool _isSpanShape(TypeSpec type, String partFormat) {
+  final fields = type.fields;
+  if (type.type != SchemaType.object || fields == null || fields.length != 2) {
+    return false;
+  }
+  final names = {for (final f in fields) f.name};
+  if (!names.contains('start') || !names.contains('end')) return false;
+  return fields.every(
+    (f) => f.type.type == SchemaType.string && f.format == partFormat,
+  );
+}
+
 /// An optional per-field constraint (§4.2: "range, non-empty, allowed values").
 class Constraint {
   const Constraint({this.min, this.max, this.nonEmpty = false});
@@ -269,14 +328,77 @@ class Field {
   /// that has none, so pre-existing descriptors are byte-identical.
   final String? fromQuestion;
 
-  /// Display hint for a `string` field, serialised as `format` in the
-  /// descriptor. Documented values: `time` (an `HH:mm` clock time) and
-  /// `date` (a `yyyy-MM-dd` calendar date).
+  /// Display hint for a field, serialised as `format` in the descriptor.
+  ///
+  /// Documented values on a `string` field: [formatTime] (`time`, an `HH:mm`
+  /// clock time) and [formatDate] (`date`, a `yyyy-MM-dd` calendar date).
+  /// Documented values on an `object` field: [formatTimeSpan] (`time_span`)
+  /// and [formatDateSpan] (`date_span`). A span object has exactly the
+  /// `string` fields `start` and `end`. Each part has `format: time` or
+  /// `format: date`.
   ///
   /// Advisory: read by client forms, never by the validator. Additive to the
   /// frozen wire shape — absent for every field that has none, so
   /// pre-existing descriptors are byte-identical.
   final String? format;
+
+  /// The [format] value for an `HH:mm` clock time on a `string` field.
+  static const String formatTime = 'time';
+
+  /// The [format] value for a `yyyy-MM-dd` calendar date on a `string` field.
+  static const String formatDate = 'date';
+
+  /// The [format] value for a time span on an `object` field. The object has
+  /// exactly the `string` fields `start` and `end`, each with `format: time`.
+  static const String formatTimeSpan = 'time_span';
+
+  /// The [format] value for a date span on an `object` field. The object has
+  /// exactly the `string` fields `start` and `end`, each with `format: date`.
+  static const String formatDateSpan = 'date_span';
+
+  /// The participant edit kind of this field, or null.
+  ///
+  /// The kind follows from the shape of the field only:
+  ///  - `int` gives [SettingsEditKind.integer].
+  ///  - `double` gives [SettingsEditKind.decimal].
+  ///  - `string` with `format: time` gives [SettingsEditKind.time].
+  ///  - `string` with `format: date` gives [SettingsEditKind.date].
+  ///  - `object` with `format: time_span` and exactly the `string` fields
+  ///    `start` and `end` (each with `format: time`) gives
+  ///    [SettingsEditKind.timeSpan].
+  ///  - `object` with `format: date_span` and exactly the `string` fields
+  ///    `start` and `end` (each with `format: date`) gives
+  ///    [SettingsEditKind.dateSpan].
+  ///
+  /// All other shapes give null. A field with a null kind cannot be
+  /// participant-editable.
+  SettingsEditKind? get editKind {
+    switch (type.type) {
+      case SchemaType.integer:
+        return SettingsEditKind.integer;
+      case SchemaType.doubleValue:
+        return SettingsEditKind.decimal;
+      case SchemaType.string:
+        if (format == formatTime) return SettingsEditKind.time;
+        if (format == formatDate) return SettingsEditKind.date;
+        return null;
+      case SchemaType.object:
+        if (format == formatTimeSpan && _isSpanShape(type, formatTime)) {
+          return SettingsEditKind.timeSpan;
+        }
+        if (format == formatDateSpan && _isSpanShape(type, formatDate)) {
+          return SettingsEditKind.dateSpan;
+        }
+        return null;
+      case SchemaType.boolean:
+      case SchemaType.enumeration:
+      case SchemaType.timestamp:
+      case SchemaType.list:
+      case SchemaType.map:
+      case SchemaType.json:
+        return null;
+    }
+  }
 
   /// Parse a field of the frozen descriptor wire shape (the inverse of
   /// [toJson]). Throws [FormatException] on a malformed node.
