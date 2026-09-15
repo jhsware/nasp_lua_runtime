@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:nasp_lua_runtime/nasp_lua_runtime.dart';
 import 'package:test/test.dart';
 
@@ -567,6 +569,466 @@ void main() {
         expect(Schema.fromJson(d.toJson()['output']).toJson(),
             d.output.toJson());
       }
+    });
+  });
+
+  group('participant-editable settings (0.8.0)', () {
+    Map<String, Object?> spanType(String partFormat) => {
+          'type': 'object',
+          'fields': [
+            {
+              'name': 'start',
+              'type': {'type': 'string'},
+              'required': true,
+              'nullable': false,
+              'format': partFormat,
+            },
+            {
+              'name': 'end',
+              'type': {'type': 'string'},
+              'required': true,
+              'nullable': false,
+              'format': partFormat,
+            },
+          ],
+        };
+
+    // Key order follows Field.toJson, so jsonEncode can compare bytes.
+    Map<String, Object?> editableJson() => {
+          'type': 'object',
+          'fields': [
+            {
+              'name': 'daily_prompts',
+              'type': {'type': 'int'},
+              'required': true,
+              'nullable': false,
+              'constraint': {'min': 1, 'max': 10},
+              'participant_editable': true,
+            },
+            {
+              'name': 'weight',
+              'type': {'type': 'double'},
+              'required': true,
+              'nullable': false,
+              'constraint': {'min': 0.5, 'max': 2.5},
+              'participant_editable': true,
+            },
+            {
+              'name': 'wake_time',
+              'type': {'type': 'string'},
+              'required': true,
+              'nullable': false,
+              'constraint': {'min': '06:00', 'max': '22:00'},
+              'format': 'time',
+              'participant_editable': true,
+            },
+            {
+              'name': 'start_date',
+              'type': {'type': 'string'},
+              'required': true,
+              'nullable': false,
+              'constraint': {'min': '2026-01-01', 'max': '2026-12-31'},
+              'format': 'date',
+              'participant_editable': true,
+            },
+            {
+              'name': 'quiet_hours',
+              'type': spanType('time'),
+              'required': true,
+              'nullable': false,
+              'constraint': {'min': '00:00', 'max': '23:59'},
+              'format': 'time_span',
+              'participant_editable': true,
+            },
+            {
+              'name': 'holiday',
+              'type': spanType('date'),
+              'required': true,
+              'nullable': false,
+              'constraint': {'min': '2026-01-01', 'max': '2026-12-31'},
+              'format': 'date_span',
+              'participant_editable': true,
+            },
+          ],
+        };
+
+    /// Parse [field] as the only field of a schema and expect a
+    /// FormatException whose message contains [message] at [path].
+    void expectRejected(Map<String, Object?> field, String message,
+        {String path = '.fields[0]'}) {
+      expect(
+        () => Schema.fromJson({
+          'type': 'object',
+          'fields': [field],
+        }),
+        throwsA(isA<FormatException>().having(
+            (e) => e.message, 'message', contains('$path: $message'))),
+      );
+    }
+
+    test('a 0.7.0 descriptor serialises byte-identical', () {
+      const v070 = '{"type":"object","fields":['
+          '{"name":"count","type":{"type":"int"},"required":true,'
+          '"nullable":false,"constraint":{"min":1,"max":10},"default":3,'
+          '"description":"How many prompts per day."},'
+          '{"name":"ratio","type":{"type":"double"},"required":false,'
+          '"nullable":false,"constraint":{"min":0.5,"max":2.5}},'
+          '{"name":"label","type":{"type":"string"},"required":true,'
+          '"nullable":false,"constraint":{"non_empty":true}},'
+          '{"name":"wake_time","type":{"type":"string"},"required":true,'
+          '"nullable":false,"from_question":"q-wake","format":"time"},'
+          '{"name":"window","type":{"type":"object","fields":['
+          '{"name":"start","type":{"type":"timestamp"},"required":true,'
+          '"nullable":false},'
+          '{"name":"end","type":{"type":"timestamp"},"required":true,'
+          '"nullable":false}]},"required":true,"nullable":false}'
+          ']}';
+      final parsed = Schema.fromJson(jsonDecode(v070));
+      expect(jsonEncode(parsed.toJson()), v070);
+      for (final field in parsed.fields) {
+        expect(field.participantEditable, isFalse);
+        expect(field.toJson().containsKey('participant_editable'), isFalse);
+      }
+    });
+
+    test('the six kinds round-trip and report their editKind', () {
+      final json = editableJson();
+      final parsed = Schema.fromJson(json);
+      expect(jsonEncode(parsed.toJson()), jsonEncode(json));
+      expect(parsed.fields.map((f) => f.editKind).toList(), [
+        SettingsEditKind.integer,
+        SettingsEditKind.decimal,
+        SettingsEditKind.time,
+        SettingsEditKind.date,
+        SettingsEditKind.timeSpan,
+        SettingsEditKind.dateSpan,
+      ]);
+      expect(parsed.fields.every((f) => f.participantEditable), isTrue);
+      // The span parts are time and date strings themselves.
+      expect(parsed.fields[4].type.fields!.map((f) => f.editKind),
+          everyElement(SettingsEditKind.time));
+      expect(parsed.fields[5].type.fields!.map((f) => f.editKind),
+          everyElement(SettingsEditKind.date));
+    });
+
+    test('the typed bound getters return the bound without a cast', () {
+      final parsed = Schema.fromJson(editableJson());
+      final numeric = parsed.fields[0].constraint!;
+      expect(numeric.numMin, 1);
+      expect(numeric.numMax, 10);
+      expect(numeric.stringMin, isNull);
+      expect(numeric.stringMax, isNull);
+      final text = parsed.fields[2].constraint!;
+      expect(text.stringMin, '06:00');
+      expect(text.stringMax, '22:00');
+      expect(text.numMin, isNull);
+      expect(text.numMax, isNull);
+      expect(Constraint.fromJson({'min': '06:00'}).stringMin, '06:00');
+    });
+
+    test('SettingsEditKind wire names', () {
+      expect(SettingsEditKind.values.map((k) => k.wireName).toList(), [
+        'integer',
+        'decimal',
+        'time',
+        'date',
+        'time_span',
+        'date_span',
+      ]);
+      for (final kind in SettingsEditKind.values) {
+        expect(SettingsEditKind.fromWireName(kind.wireName), kind);
+      }
+      expect(SettingsEditKind.fromWireName('timeSpan'), isNull);
+      expect(SettingsEditKind.fromWireName('bool'), isNull);
+    });
+
+    test('editKind is null for the other shapes', () {
+      expect(Field('x', TypeSpec.boolean()).editKind, isNull);
+      expect(Field('x', TypeSpec.enumeration(['a'])).editKind, isNull);
+      expect(Field('x', TypeSpec.timestamp()).editKind, isNull);
+      expect(Field('x', TypeSpec.list(TypeSpec.integer())).editKind, isNull);
+      expect(Field('x', TypeSpec.map(TypeSpec.integer())).editKind, isNull);
+      expect(Field('x', TypeSpec.json()).editKind, isNull);
+      expect(Field('x', TypeSpec.string()).editKind, isNull);
+      expect(Field('x', TypeSpec.string(), format: 'email').editKind, isNull);
+      expect(Field('x', TypeSpec.integer(), format: 'time').editKind,
+          SettingsEditKind.integer);
+      // A span object without the span format is a plain object.
+      final parts = [
+        Field('start', TypeSpec.string(), format: Field.formatTime),
+        Field('end', TypeSpec.string(), format: Field.formatTime),
+      ];
+      expect(Field('x', TypeSpec.object(parts)).editKind, isNull);
+      expect(
+          Field('x', TypeSpec.object(parts), format: Field.formatTimeSpan)
+              .editKind,
+          SettingsEditKind.timeSpan);
+      expect(
+          Field('x', TypeSpec.object(parts), format: Field.formatDateSpan)
+              .editKind,
+          isNull);
+    });
+
+    test('a Field built in Dart serialises participant_editable when true', () {
+      final json = Field('count', TypeSpec.integer(),
+              constraint: const Constraint(min: 1, max: 5),
+              participantEditable: true)
+          .toJson();
+      expect(json['participant_editable'], isTrue);
+      expect(Field.fromJson(json).participantEditable, isTrue);
+      expect(Field.fromJson(json).toJson(), json);
+    });
+
+    test('rejects a malformed bound', () {
+      expectRejected({
+        'name': 'x',
+        'type': {'type': 'int'},
+        'constraint': {'min': ''},
+      }, '"min" must be a number or a non-empty string',
+          path: '.fields[0].constraint');
+      expectRejected({
+        'name': 'x',
+        'type': {'type': 'int'},
+        'constraint': {'max': true},
+      }, '"max" must be a number or a non-empty string',
+          path: '.fields[0].constraint');
+    });
+
+    test('rejects a non-bool participant_editable', () {
+      expectRejected({
+        'name': 'x',
+        'type': {'type': 'int'},
+        'participant_editable': 'yes',
+      }, '"participant_editable" must be a bool');
+    });
+
+    test('rejects participant_editable on a field without an edit kind', () {
+      const message = 'participant_editable requires one of: integer, '
+          'decimal, time, date, time_span, date_span';
+      final types = <Map<String, Object?>>[
+        {'type': 'bool'},
+        {
+          'type': 'enum',
+          'values': ['a', 'b'],
+        },
+        {'type': 'timestamp'},
+        {
+          'type': 'list',
+          'element': {'type': 'string'},
+        },
+        {
+          'type': 'map',
+          'value': {'type': 'int'},
+        },
+        {'type': 'json'},
+        {'type': 'string'},
+        {
+          'type': 'object',
+          'fields': [
+            {
+              'name': 'a',
+              'type': {'type': 'int'},
+            },
+          ],
+        },
+      ];
+      for (final type in types) {
+        expectRejected({
+          'name': 'x',
+          'type': type,
+          'participant_editable': true,
+        }, message);
+      }
+      // A nested field reports its own path.
+      expectRejected({
+        'name': 'x',
+        'type': {
+          'type': 'object',
+          'fields': [
+            {
+              'name': 'flag',
+              'type': {'type': 'bool'},
+              'participant_editable': true,
+            },
+          ],
+        },
+      }, message, path: '.fields[0].type.fields[0]');
+    });
+
+    test('rejects a numeric bound on a string-based kind', () {
+      expectRejected({
+        'name': 'x',
+        'type': {'type': 'string'},
+        'constraint': {'min': 6},
+        'format': 'time',
+      }, 'numeric bounds require an int or double field');
+      expectRejected({
+        'name': 'x',
+        'type': spanType('time'),
+        'constraint': {'max': 22},
+        'format': 'time_span',
+      }, 'numeric bounds require an int or double field');
+    });
+
+    test('rejects a string bound on a numeric or other type', () {
+      const message =
+          'string bounds require a time, date, time_span or date_span field';
+      expectRejected({
+        'name': 'x',
+        'type': {'type': 'int'},
+        'constraint': {'min': '06:00'},
+      }, message);
+      expectRejected({
+        'name': 'x',
+        'type': {'type': 'string'},
+        'constraint': {'max': 'z'},
+      }, message);
+      expectRejected({
+        'name': 'x',
+        'type': {'type': 'timestamp'},
+        'constraint': {'min': '2026-01-01'},
+      }, message);
+    });
+
+    test('rejects a span format on a shape that is not a span', () {
+      const timeMessage = 'format "time_span" requires an object with string '
+          'fields start and end (format time)';
+      const dateMessage = 'format "date_span" requires an object with string '
+          'fields start and end (format date)';
+      expectRejected({
+        'name': 'x',
+        'type': {'type': 'string'},
+        'format': 'time_span',
+      }, timeMessage);
+      expectRejected({
+        'name': 'x',
+        'type': {
+          'type': 'object',
+          'fields': [
+            {
+              'name': 'start',
+              'type': {'type': 'string'},
+              'format': 'time',
+            },
+          ],
+        },
+        'format': 'time_span',
+        'participant_editable': true,
+      }, timeMessage);
+      expectRejected({
+        'name': 'x',
+        'type': spanType('time'),
+        'format': 'date_span',
+      }, dateMessage);
+    });
+
+    test('format time and date stay advisory on other types', () {
+      final parsed = Schema.fromJson({
+        'type': 'object',
+        'fields': [
+          {
+            'name': 'x',
+            'type': {'type': 'int'},
+            'format': 'time',
+          },
+          {
+            'name': 'y',
+            'type': {'type': 'bool'},
+            'format': 'date',
+          },
+        ],
+      });
+      expect(parsed.fields[1].editKind, isNull);
+    });
+
+    group('validator', () {
+      Schema schema() {
+        final fields = <Map<String, Object?>>[
+          for (final field in editableJson()['fields'] as List)
+            {...(field as Map<String, Object?>), 'required': false},
+          {
+            'name': 'day_window',
+            'type': spanType('time'),
+            'required': false,
+            'constraint': {'min': '06:00', 'max': '22:00'},
+            'format': 'time_span',
+            'participant_editable': true,
+          },
+        ];
+        final settings = Schema.fromJson({'type': 'object', 'fields': fields});
+        // Nest the settings under `rule` to check the full path.
+        return Schema([
+          Field('rule', settings.asType),
+        ]);
+      }
+
+      Map<String, Object?> validate(Map<String, Object?> rule) =>
+          schema().validate({'rule': rule},
+              part: ScriptKind.scheduling, input: true);
+
+      Matcher fails(String path, String message) => throwsA(isA<ScriptError>()
+          .having((e) => e.type, 'type', ScriptErrorType.inputInvalid)
+          .having((e) => e.path, 'path', path)
+          .having((e) => e.message, 'message', message));
+
+      test('a time value outside the string bounds fails', () {
+        expect(() => validate({'wake_time': '05:59'}),
+            fails('rule.wake_time', 'must be >= 06:00'));
+        expect(() => validate({'wake_time': '22:01'}),
+            fails('rule.wake_time', 'must be <= 22:00'));
+      });
+
+      test('the string bounds are inclusive', () {
+        expect(validate({'wake_time': '06:00'})['rule'],
+            {'wake_time': '06:00'});
+        expect(validate({'wake_time': '22:00'})['rule'],
+            {'wake_time': '22:00'});
+      });
+
+      test('a date value outside the string bounds fails', () {
+        expect(() => validate({'start_date': '2025-12-31'}),
+            fails('rule.start_date', 'must be >= 2026-01-01'));
+        expect(() => validate({'start_date': '2027-01-01'}),
+            fails('rule.start_date', 'must be <= 2026-12-31'));
+      });
+
+      test('a span part outside the bounds fails at that part', () {
+        expect(
+            () => validate({
+                  'day_window': {'start': '07:00', 'end': '23:00'},
+                }),
+            fails('rule.day_window.end', 'must be <= 22:00'));
+        expect(
+            () => validate({
+                  'day_window': {'start': '05:00', 'end': '08:00'},
+                }),
+            fails('rule.day_window.start', 'must be >= 06:00'));
+        expect(
+            () => validate({
+                  'holiday': {'start': '2026-06-01', 'end': '2027-01-02'},
+                }),
+            fails('rule.holiday.end', 'must be <= 2026-12-31'));
+      });
+
+      test('an overnight time span inside the bounds passes', () {
+        final out = validate({
+          'quiet_hours': {'start': '22:00', 'end': '06:00'},
+        });
+        expect(out['rule'], {
+          'quiet_hours': {'start': '22:00', 'end': '06:00'},
+        });
+      });
+
+      test('numeric bounds behave as before', () {
+        expect(validate({'daily_prompts': 5})['rule'], {'daily_prompts': 5});
+        expect(() => validate({'daily_prompts': 0}),
+            fails('rule.daily_prompts', 'must be >= 1'));
+        expect(() => validate({'daily_prompts': 11}),
+            fails('rule.daily_prompts', 'must be <= 10'));
+        expect(() => validate({'weight': 0.25}),
+            fails('rule.weight', 'must be >= 0.5'));
+        expect(validate({'weight': 2})['rule'], {'weight': 2.0});
+      });
     });
   });
 }
