@@ -23,7 +23,73 @@ component that must be **byte-identical** in every host that executes scripts
   `from_question` (the enrolment question whose answer seeds the field, read
   by the server's settings derivation), and `format` (a display hint for a
   `string` field — `time` for `HH:mm`, `date` for `yyyy-MM-dd` — read by
-  client forms).
+  client forms). `Field` also carries `participant_editable` (see
+  [Participant-editable settings](#participant-editable-settings)).
+
+## Participant-editable settings
+
+An operator can mark a field of a bundle-declared settings schema as editable
+by the participant. The participant edits the field in the mobile app
+(Settings > Personalise). The server enforces the bounds on every settings
+write. Both hosts use the same parser (`Schema.fromJson`) and the same
+validator (`Schema.validate`).
+
+Set `participant_editable: true` on the field. The key is a bool. Absent
+means false. The key is serialised only when true, so a descriptor without it
+is byte-identical to its 0.7.0 form.
+
+The field must have one of six edit kinds (`SettingsEditKind`). The kind
+follows from the shape of the field (`Field.editKind`):
+
+| kind | wire shape | bounds |
+| --- | --- | --- |
+| `integer` | type `int` | numbers |
+| `decimal` | type `double` | numbers |
+| `time` | type `string`, `format: time` | `HH:mm` strings |
+| `date` | type `string`, `format: date` | `yyyy-MM-dd` strings |
+| `time_span` | type `object`, `format: time_span`, exactly the `string` fields `start` and `end`, each with `format: time` | `HH:mm` strings, applied to `start` and to `end` |
+| `date_span` | type `object`, `format: date_span`, exactly the `string` fields `start` and `end`, each with `format: date` | `yyyy-MM-dd` strings, applied to `start` and to `end` |
+
+Example (a time span from 22:00 to 06:00 is valid):
+
+```json
+{
+  "name": "quiet_hours",
+  "type": {
+    "type": "object",
+    "fields": [
+      {"name": "start", "type": {"type": "string"}, "required": true, "nullable": false, "format": "time"},
+      {"name": "end", "type": {"type": "string"}, "required": true, "nullable": false, "format": "time"}
+    ]
+  },
+  "required": true,
+  "nullable": false,
+  "constraint": {"min": "06:00", "max": "23:30"},
+  "format": "time_span",
+  "participant_editable": true
+}
+```
+
+Rules:
+
+- `constraint.min` and `constraint.max` are a number or a non-empty string.
+  In Dart they are `Object?`. Read them with `numMin`, `numMax`, `stringMin`
+  and `stringMax`.
+- A number bound is valid only on an `int` or `double` field.
+- A string bound is valid only on a `time`, `date`, `time_span` or
+  `date_span` field.
+- `participant_editable: true` is valid only on a field with an edit kind. A
+  `bool`, `enum`, `timestamp`, `list`, `map` or `json` field, or another
+  object, cannot be participant-editable.
+- `format: time_span` and `format: date_span` are valid only on the span
+  object shape.
+- `Field.fromJson` rejects each violation with a path-qualified
+  `FormatException`.
+- The validator compares string bounds lexicographically. Use the canonical
+  `HH:mm` and `yyyy-MM-dd` forms. On a span, the validator checks `start` and
+  `end` separately and reports the part path (for example
+  `rule.quiet_hours.end: must be <= 23:30`). It does not require
+  `start <= end`.
 
 ## Contract v2: grouped inputs
 
@@ -73,7 +139,7 @@ dependencies:
   nasp_lua_runtime:
     git:
       url: <this repository>
-      ref: v0.7.0
+      ref: v0.8.0
 ```
 
 The conformance test suite (`dart test`) is the acceptance gate for any future

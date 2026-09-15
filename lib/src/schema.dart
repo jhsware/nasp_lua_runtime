@@ -33,6 +33,51 @@ enum SchemaType {
   /// losslessly in both directions but not field-type-checked.
   json,
 }
+
+/// The kind of a participant-editable settings field.
+///
+/// A settings field that a participant can edit in the mobile app has one of
+/// these six kinds. The kind follows from the shape of the field (see
+/// [Field.editKind]). The kind selects the edit widget in the backend app and
+/// in the mobile app.
+enum SettingsEditKind {
+  /// Type `int`. The bounds are numbers.
+  integer('integer'),
+
+  /// Type `double`. The bounds are numbers.
+  decimal('decimal'),
+
+  /// Type `string` with `format: time`. The bounds are `HH:mm` strings.
+  time('time'),
+
+  /// Type `string` with `format: date`. The bounds are `yyyy-MM-dd` strings.
+  date('date'),
+
+  /// Type `object` with `format: time_span` and exactly the `string` fields
+  /// `start` and `end`, each with `format: time`. The bounds are `HH:mm`
+  /// strings. They apply to `start` and to `end`. The span has no order
+  /// rule, so an overnight span such as 22:00-06:00 is valid.
+  timeSpan('time_span'),
+
+  /// Type `object` with `format: date_span` and exactly the `string` fields
+  /// `start` and `end`, each with `format: date`. The bounds are
+  /// `yyyy-MM-dd` strings. They apply to `start` and to `end`.
+  dateSpan('date_span');
+
+  const SettingsEditKind(this.wireName);
+
+  /// The name of this kind in docs, payloads and error messages.
+  final String wireName;
+
+  /// The kind with the wire name [name], or null when no kind has that name.
+  static SettingsEditKind? fromWireName(String name) {
+    for (final kind in values) {
+      if (kind.wireName == name) return kind;
+    }
+    return null;
+  }
+}
+
 /// A (possibly nested) type in the schema tree.
 class TypeSpec {
   TypeSpec._(this.type, {this.element, this.value, this.fields, this.enumValues});
@@ -172,18 +217,58 @@ class TypeSpec {
 String _at(String path, String message) =>
     path.isEmpty ? message : '$path: $message';
 
+/// True when [type] is an `object` with exactly the `string` fields `start`
+/// and `end`, and each part has `format` equal to [partFormat].
+bool _isSpanShape(TypeSpec type, String partFormat) {
+  final fields = type.fields;
+  if (type.type != SchemaType.object || fields == null || fields.length != 2) {
+    return false;
+  }
+  final names = {for (final f in fields) f.name};
+  if (!names.contains('start') || !names.contains('end')) return false;
+  return fields.every(
+    (f) => f.type.type == SchemaType.string && f.format == partFormat,
+  );
+}
+
 /// An optional per-field constraint (§4.2: "range, non-empty, allowed values").
+///
+/// A bound ([min] or [max]) is a `num` or a non-empty `String`:
+///  - A number bound applies to an `int` or `double` field.
+///  - A string bound applies to a `string` field with `format: time` or
+///    `format: date`, and to `start` and `end` of a `time_span` or
+///    `date_span` object. The validator compares the strings
+///    lexicographically, so the values must use the canonical `HH:mm` or
+///    `yyyy-MM-dd` form.
+///
+/// [Field.fromJson] rejects all other pairs of bound and field type.
 class Constraint {
   const Constraint({this.min, this.max, this.nonEmpty = false});
 
-  /// Inclusive lower bound for numeric fields.
-  final num? min;
+  /// Inclusive lower bound: a `num` or a non-empty `String`.
+  ///
+  /// Use [numMin] or [stringMin] to read the bound without a cast.
+  final Object? min;
 
-  /// Inclusive upper bound for numeric fields.
-  final num? max;
+  /// Inclusive upper bound: a `num` or a non-empty `String`.
+  ///
+  /// Use [numMax] or [stringMax] to read the bound without a cast.
+  final Object? max;
 
   /// For strings and lists: the value must be non-empty.
   final bool nonEmpty;
+
+  /// [min] when it is a number, otherwise null.
+  num? get numMin => min is num ? min as num : null;
+
+  /// [max] when it is a number, otherwise null.
+  num? get numMax => max is num ? max as num : null;
+
+  /// [min] when it is a string, otherwise null.
+  String? get stringMin => min is String ? min as String : null;
+
+  /// [max] when it is a string, otherwise null.
+  String? get stringMax => max is String ? max as String : null;
 
   /// Parse a constraint of the frozen descriptor wire shape (the inverse of
   /// [toJson]). Throws [FormatException] on a malformed node.
@@ -194,21 +279,29 @@ class Constraint {
     final min = json['min'];
     final max = json['max'];
     final nonEmpty = json['non_empty'];
-    if (min != null && min is! num) {
-      throw FormatException(_at(path, '"min" must be a number'));
+    if (!_isBound(min)) {
+      throw FormatException(
+        _at(path, '"min" must be a number or a non-empty string'),
+      );
     }
-    if (max != null && max is! num) {
-      throw FormatException(_at(path, '"max" must be a number'));
+    if (!_isBound(max)) {
+      throw FormatException(
+        _at(path, '"max" must be a number or a non-empty string'),
+      );
     }
     if (nonEmpty != null && nonEmpty is! bool) {
       throw FormatException(_at(path, '"non_empty" must be a bool'));
     }
     return Constraint(
-      min: min as num?,
-      max: max as num?,
+      min: min,
+      max: max,
       nonEmpty: nonEmpty == true,
     );
   }
+
+  /// True when [value] is absent, a `num`, or a non-empty `String`.
+  static bool _isBound(Object? value) =>
+      value == null || value is num || (value is String && value.isNotEmpty);
 
   Map<String, Object?> toJson() => {
         if (min != null) 'min': min,
@@ -218,6 +311,39 @@ class Constraint {
 }
 
 /// One field of an object schema.
+///
+/// A field of a bundle-declared settings schema can be editable by the
+/// participant (`participant_editable: true`). The participant edits the
+/// field in the mobile app (Settings > Personalise). The rules are:
+///  - `participant_editable` is a bool. Absent means false. It is serialised
+///    only when true.
+///  - `participant_editable: true` is valid only on a field with one of the
+///    six edit kinds ([SettingsEditKind]):
+///     - `integer`: type `int`. The bounds are numbers.
+///     - `decimal`: type `double`. The bounds are numbers.
+///     - `time`: type `string` with `format: time`. The bounds are `HH:mm`
+///       strings.
+///     - `date`: type `string` with `format: date`. The bounds are
+///       `yyyy-MM-dd` strings.
+///     - `time_span`: type `object` with `format: time_span` and exactly the
+///       `string` fields `start` and `end`, each with `format: time`. The
+///       bounds are `HH:mm` strings. They apply to `start` and to `end`.
+///       There is no order rule, so an overnight span such as 22:00-06:00 is
+///       valid.
+///     - `date_span`: type `object` with `format: date_span` and exactly the
+///       `string` fields `start` and `end`, each with `format: date`. The
+///       bounds are `yyyy-MM-dd` strings. They apply to `start` and to `end`.
+///  - A number bound ([Constraint.min], [Constraint.max]) is valid only on an
+///    `int` or `double` field.
+///  - A string bound is valid only on a `time`, `date`, `time_span` or
+///    `date_span` field.
+///  - `format: time_span` and `format: date_span` are valid only on the span
+///    object shape above.
+///
+/// [Field.fromJson] rejects each other combination with a path-qualified
+/// [FormatException]. A `bool`, `enum`, `timestamp`, `list`, `map` or `json`
+/// field, or another object, cannot be participant-editable. The values
+/// `time` and `date` of [format] stay advisory on other fields.
 class Field {
   const Field(
     this.name,
@@ -229,6 +355,7 @@ class Field {
     this.description,
     this.fromQuestion,
     this.format,
+    this.participantEditable = false,
   });
 
   final String name;
@@ -269,14 +396,89 @@ class Field {
   /// that has none, so pre-existing descriptors are byte-identical.
   final String? fromQuestion;
 
-  /// Display hint for a `string` field, serialised as `format` in the
-  /// descriptor. Documented values: `time` (an `HH:mm` clock time) and
-  /// `date` (a `yyyy-MM-dd` calendar date).
+  /// Display hint for a field, serialised as `format` in the descriptor.
   ///
-  /// Advisory: read by client forms, never by the validator. Additive to the
-  /// frozen wire shape — absent for every field that has none, so
-  /// pre-existing descriptors are byte-identical.
+  /// Documented values on a `string` field: [formatTime] (`time`, an `HH:mm`
+  /// clock time) and [formatDate] (`date`, a `yyyy-MM-dd` calendar date).
+  /// Documented values on an `object` field: [formatTimeSpan] (`time_span`)
+  /// and [formatDateSpan] (`date_span`). A span object has exactly the
+  /// `string` fields `start` and `end`. Each part has `format: time` or
+  /// `format: date`.
+  ///
+  /// Advisory for `time` and `date`: read by client forms, never by the
+  /// validator. [Field.fromJson] checks `time_span` and `date_span` against
+  /// the span object shape. Additive to the frozen wire shape — absent for
+  /// every field that has none, so pre-existing descriptors are
+  /// byte-identical.
   final String? format;
+
+  /// Whether a participant can edit this settings field in the mobile app,
+  /// serialised as `participant_editable` in the descriptor.
+  ///
+  /// Valid only on a field that has an [editKind]. [Field.fromJson] rejects
+  /// `participant_editable: true` on all other fields. The server enforces
+  /// the [constraint] bounds on every settings write. Additive to the frozen
+  /// wire shape — serialised only when true, so pre-existing descriptors are
+  /// byte-identical.
+  final bool participantEditable;
+
+  /// The [format] value for an `HH:mm` clock time on a `string` field.
+  static const String formatTime = 'time';
+
+  /// The [format] value for a `yyyy-MM-dd` calendar date on a `string` field.
+  static const String formatDate = 'date';
+
+  /// The [format] value for a time span on an `object` field. The object has
+  /// exactly the `string` fields `start` and `end`, each with `format: time`.
+  static const String formatTimeSpan = 'time_span';
+
+  /// The [format] value for a date span on an `object` field. The object has
+  /// exactly the `string` fields `start` and `end`, each with `format: date`.
+  static const String formatDateSpan = 'date_span';
+
+  /// The participant edit kind of this field, or null.
+  ///
+  /// The kind follows from the shape of the field only:
+  ///  - `int` gives [SettingsEditKind.integer].
+  ///  - `double` gives [SettingsEditKind.decimal].
+  ///  - `string` with `format: time` gives [SettingsEditKind.time].
+  ///  - `string` with `format: date` gives [SettingsEditKind.date].
+  ///  - `object` with `format: time_span` and exactly the `string` fields
+  ///    `start` and `end` (each with `format: time`) gives
+  ///    [SettingsEditKind.timeSpan].
+  ///  - `object` with `format: date_span` and exactly the `string` fields
+  ///    `start` and `end` (each with `format: date`) gives
+  ///    [SettingsEditKind.dateSpan].
+  ///
+  /// All other shapes give null. A field with a null kind cannot be
+  /// participant-editable.
+  SettingsEditKind? get editKind {
+    switch (type.type) {
+      case SchemaType.integer:
+        return SettingsEditKind.integer;
+      case SchemaType.doubleValue:
+        return SettingsEditKind.decimal;
+      case SchemaType.string:
+        if (format == formatTime) return SettingsEditKind.time;
+        if (format == formatDate) return SettingsEditKind.date;
+        return null;
+      case SchemaType.object:
+        if (format == formatTimeSpan && _isSpanShape(type, formatTime)) {
+          return SettingsEditKind.timeSpan;
+        }
+        if (format == formatDateSpan && _isSpanShape(type, formatDate)) {
+          return SettingsEditKind.dateSpan;
+        }
+        return null;
+      case SchemaType.boolean:
+      case SchemaType.enumeration:
+      case SchemaType.timestamp:
+      case SchemaType.list:
+      case SchemaType.map:
+      case SchemaType.json:
+        return null;
+    }
+  }
 
   /// Parse a field of the frozen descriptor wire shape (the inverse of
   /// [toJson]). Throws [FormatException] on a malformed node.
@@ -311,7 +513,13 @@ class Field {
     if (format != null && (format is! String || format.isEmpty)) {
       throw FormatException(_at(path, '"format" must be a non-empty string'));
     }
-    return Field(
+    final participantEditable = json['participant_editable'];
+    if (participantEditable != null && participantEditable is! bool) {
+      throw FormatException(
+        _at(path, '"participant_editable" must be a bool'),
+      );
+    }
+    final field = Field(
       name,
       TypeSpec.fromJson(json['type'], path: '$path.type'),
       required: required != false,
@@ -323,7 +531,62 @@ class Field {
       description: description as String?,
       fromQuestion: fromQuestion as String?,
       format: format as String?,
+      participantEditable: participantEditable == true,
     );
+    field._checkEditContract(path);
+    return field;
+  }
+
+  /// The edit kinds that take string bounds.
+  static const Set<SettingsEditKind> _stringBoundKinds = {
+    SettingsEditKind.time,
+    SettingsEditKind.date,
+    SettingsEditKind.timeSpan,
+    SettingsEditKind.dateSpan,
+  };
+
+  /// Throws [FormatException] at [path] when the span format, the
+  /// [participantEditable] flag or the bound types do not agree with the
+  /// shape of this field.
+  void _checkEditContract(String path) {
+    final kind = editKind;
+    if (format == formatTimeSpan && kind != SettingsEditKind.timeSpan) {
+      throw FormatException(_at(
+        path,
+        'format "time_span" requires an object with string fields start '
+        'and end (format time)',
+      ));
+    }
+    if (format == formatDateSpan && kind != SettingsEditKind.dateSpan) {
+      throw FormatException(_at(
+        path,
+        'format "date_span" requires an object with string fields start '
+        'and end (format date)',
+      ));
+    }
+    if (participantEditable && kind == null) {
+      throw FormatException(_at(
+        path,
+        'participant_editable requires one of: '
+        '${SettingsEditKind.values.map((k) => k.wireName).join(', ')}',
+      ));
+    }
+    final c = constraint;
+    if (c == null) return;
+    if ((c.numMin != null || c.numMax != null) &&
+        type.type != SchemaType.integer &&
+        type.type != SchemaType.doubleValue) {
+      throw FormatException(
+        _at(path, 'numeric bounds require an int or double field'),
+      );
+    }
+    if ((c.stringMin != null || c.stringMax != null) &&
+        !_stringBoundKinds.contains(kind)) {
+      throw FormatException(_at(
+        path,
+        'string bounds require a time, date, time_span or date_span field',
+      ));
+    }
   }
 
   Map<String, Object?> toJson() => {
@@ -336,6 +599,7 @@ class Field {
         if (description != null) 'description': description,
         if (fromQuestion != null) 'from_question': fromQuestion,
         if (format != null) 'format': format,
+        if (participantEditable) 'participant_editable': true,
       };
 }
 
@@ -510,15 +774,47 @@ class _Validator {
     return out;
   }
 
+  /// Apply the bounds and the non-empty rule of [c] to the coerced [value].
+  ///
+  /// Number bounds apply to a `num` value. String bounds apply to a `String`
+  /// value, and to `start` and `end` of a span object (a `Map`). Strings are
+  /// compared lexicographically. The validator does not require
+  /// `start <= end`, so an overnight time span is valid. Other pairs of bound
+  /// and value cannot pass [Field.fromJson], so they are ignored here.
   void _constrain(Constraint? c, Object? value, String path) {
     if (c == null) return;
     if (value is num) {
-      if (c.min != null && value < c.min!) _fail(path, 'must be >= ${c.min}');
-      if (c.max != null && value > c.max!) _fail(path, 'must be <= ${c.max}');
+      final min = c.numMin;
+      final max = c.numMax;
+      if (min != null && value < min) _fail(path, 'must be >= $min');
+      if (max != null && value > max) _fail(path, 'must be <= $max');
+    }
+    if (value is String) {
+      _stringBounds(c, value, path);
+    }
+    if (value is Map && (c.stringMin != null || c.stringMax != null)) {
+      for (final part in const ['start', 'end']) {
+        final partValue = value[part];
+        if (partValue is String) {
+          _stringBounds(c, partValue, path.isEmpty ? part : '$path.$part');
+        }
+      }
     }
     if (c.nonEmpty) {
       if (value is String && value.isEmpty) _fail(path, 'must be non-empty');
       if (value is List && value.isEmpty) _fail(path, 'must be non-empty');
+    }
+  }
+
+  /// Apply the string bounds of [c] to the string [value] at [path].
+  void _stringBounds(Constraint c, String value, String path) {
+    final min = c.stringMin;
+    final max = c.stringMax;
+    if (min != null && value.compareTo(min) < 0) {
+      _fail(path, 'must be >= $min');
+    }
+    if (max != null && value.compareTo(max) > 0) {
+      _fail(path, 'must be <= $max');
     }
   }
 
