@@ -232,17 +232,43 @@ bool _isSpanShape(TypeSpec type, String partFormat) {
 }
 
 /// An optional per-field constraint (§4.2: "range, non-empty, allowed values").
+///
+/// A bound ([min] or [max]) is a `num` or a non-empty `String`:
+///  - A number bound applies to an `int` or `double` field.
+///  - A string bound applies to a `string` field with `format: time` or
+///    `format: date`, and to `start` and `end` of a `time_span` or
+///    `date_span` object. The validator compares the strings
+///    lexicographically, so the values must use the canonical `HH:mm` or
+///    `yyyy-MM-dd` form.
+///
+/// [Field.fromJson] rejects all other pairs of bound and field type.
 class Constraint {
   const Constraint({this.min, this.max, this.nonEmpty = false});
 
-  /// Inclusive lower bound for numeric fields.
-  final num? min;
+  /// Inclusive lower bound: a `num` or a non-empty `String`.
+  ///
+  /// Use [numMin] or [stringMin] to read the bound without a cast.
+  final Object? min;
 
-  /// Inclusive upper bound for numeric fields.
-  final num? max;
+  /// Inclusive upper bound: a `num` or a non-empty `String`.
+  ///
+  /// Use [numMax] or [stringMax] to read the bound without a cast.
+  final Object? max;
 
   /// For strings and lists: the value must be non-empty.
   final bool nonEmpty;
+
+  /// [min] when it is a number, otherwise null.
+  num? get numMin => min is num ? min as num : null;
+
+  /// [max] when it is a number, otherwise null.
+  num? get numMax => max is num ? max as num : null;
+
+  /// [min] when it is a string, otherwise null.
+  String? get stringMin => min is String ? min as String : null;
+
+  /// [max] when it is a string, otherwise null.
+  String? get stringMax => max is String ? max as String : null;
 
   /// Parse a constraint of the frozen descriptor wire shape (the inverse of
   /// [toJson]). Throws [FormatException] on a malformed node.
@@ -253,21 +279,29 @@ class Constraint {
     final min = json['min'];
     final max = json['max'];
     final nonEmpty = json['non_empty'];
-    if (min != null && min is! num) {
-      throw FormatException(_at(path, '"min" must be a number'));
+    if (!_isBound(min)) {
+      throw FormatException(
+        _at(path, '"min" must be a number or a non-empty string'),
+      );
     }
-    if (max != null && max is! num) {
-      throw FormatException(_at(path, '"max" must be a number'));
+    if (!_isBound(max)) {
+      throw FormatException(
+        _at(path, '"max" must be a number or a non-empty string'),
+      );
     }
     if (nonEmpty != null && nonEmpty is! bool) {
       throw FormatException(_at(path, '"non_empty" must be a bool'));
     }
     return Constraint(
-      min: min as num?,
-      max: max as num?,
+      min: min,
+      max: max,
       nonEmpty: nonEmpty == true,
     );
   }
+
+  /// True when [value] is absent, a `num`, or a non-empty `String`.
+  static bool _isBound(Object? value) =>
+      value == null || value is num || (value is String && value.isNotEmpty);
 
   Map<String, Object?> toJson() => {
         if (min != null) 'min': min,
@@ -635,8 +669,10 @@ class _Validator {
   void _constrain(Constraint? c, Object? value, String path) {
     if (c == null) return;
     if (value is num) {
-      if (c.min != null && value < c.min!) _fail(path, 'must be >= ${c.min}');
-      if (c.max != null && value > c.max!) _fail(path, 'must be <= ${c.max}');
+      final min = c.numMin;
+      final max = c.numMax;
+      if (min != null && value < min) _fail(path, 'must be >= $min');
+      if (max != null && value > max) _fail(path, 'must be <= $max');
     }
     if (c.nonEmpty) {
       if (value is String && value.isEmpty) _fail(path, 'must be non-empty');

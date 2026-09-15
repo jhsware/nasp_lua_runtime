@@ -177,8 +177,10 @@ bool _isRealString(LuaState ls) => ls.isString(-1) && !ls.isNumber(-1);
 void _constrain(ScriptKind part, Constraint? c, Object? value, String path) {
   if (c == null) return;
   if (value is num) {
-    if (c.min != null && value < c.min!) _fail(part, path, 'must be >= ${c.min}');
-    if (c.max != null && value > c.max!) _fail(part, path, 'must be <= ${c.max}');
+    final min = c.numMin;
+    final max = c.numMax;
+    if (min != null && value < min) _fail(part, path, 'must be >= $min');
+    if (max != null && value > max) _fail(part, path, 'must be <= $max');
   }
   if (c.nonEmpty) {
     if (value is String && value.isEmpty) _fail(part, path, 'must be non-empty');
