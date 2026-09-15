@@ -774,6 +774,13 @@ class _Validator {
     return out;
   }
 
+  /// Apply the bounds and the non-empty rule of [c] to the coerced [value].
+  ///
+  /// Number bounds apply to a `num` value. String bounds apply to a `String`
+  /// value, and to `start` and `end` of a span object (a `Map`). Strings are
+  /// compared lexicographically. The validator does not require
+  /// `start <= end`, so an overnight time span is valid. Other pairs of bound
+  /// and value cannot pass [Field.fromJson], so they are ignored here.
   void _constrain(Constraint? c, Object? value, String path) {
     if (c == null) return;
     if (value is num) {
@@ -782,9 +789,32 @@ class _Validator {
       if (min != null && value < min) _fail(path, 'must be >= $min');
       if (max != null && value > max) _fail(path, 'must be <= $max');
     }
+    if (value is String) {
+      _stringBounds(c, value, path);
+    }
+    if (value is Map && (c.stringMin != null || c.stringMax != null)) {
+      for (final part in const ['start', 'end']) {
+        final partValue = value[part];
+        if (partValue is String) {
+          _stringBounds(c, partValue, path.isEmpty ? part : '$path.$part');
+        }
+      }
+    }
     if (c.nonEmpty) {
       if (value is String && value.isEmpty) _fail(path, 'must be non-empty');
       if (value is List && value.isEmpty) _fail(path, 'must be non-empty');
+    }
+  }
+
+  /// Apply the string bounds of [c] to the string [value] at [path].
+  void _stringBounds(Constraint c, String value, String path) {
+    final min = c.stringMin;
+    final max = c.stringMax;
+    if (min != null && value.compareTo(min) < 0) {
+      _fail(path, 'must be >= $min');
+    }
+    if (max != null && value.compareTo(max) > 0) {
+      _fail(path, 'must be <= $max');
     }
   }
 
