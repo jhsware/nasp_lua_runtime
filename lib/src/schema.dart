@@ -311,6 +311,39 @@ class Constraint {
 }
 
 /// One field of an object schema.
+///
+/// A field of a bundle-declared settings schema can be editable by the
+/// participant (`participant_editable: true`). The participant edits the
+/// field in the mobile app (Settings > Personalise). The rules are:
+///  - `participant_editable` is a bool. Absent means false. It is serialised
+///    only when true.
+///  - `participant_editable: true` is valid only on a field with one of the
+///    six edit kinds ([SettingsEditKind]):
+///     - `integer`: type `int`. The bounds are numbers.
+///     - `decimal`: type `double`. The bounds are numbers.
+///     - `time`: type `string` with `format: time`. The bounds are `HH:mm`
+///       strings.
+///     - `date`: type `string` with `format: date`. The bounds are
+///       `yyyy-MM-dd` strings.
+///     - `time_span`: type `object` with `format: time_span` and exactly the
+///       `string` fields `start` and `end`, each with `format: time`. The
+///       bounds are `HH:mm` strings. They apply to `start` and to `end`.
+///       There is no order rule, so an overnight span such as 22:00-06:00 is
+///       valid.
+///     - `date_span`: type `object` with `format: date_span` and exactly the
+///       `string` fields `start` and `end`, each with `format: date`. The
+///       bounds are `yyyy-MM-dd` strings. They apply to `start` and to `end`.
+///  - A number bound ([Constraint.min], [Constraint.max]) is valid only on an
+///    `int` or `double` field.
+///  - A string bound is valid only on a `time`, `date`, `time_span` or
+///    `date_span` field.
+///  - `format: time_span` and `format: date_span` are valid only on the span
+///    object shape above.
+///
+/// [Field.fromJson] rejects each other combination with a path-qualified
+/// [FormatException]. A `bool`, `enum`, `timestamp`, `list`, `map` or `json`
+/// field, or another object, cannot be participant-editable. The values
+/// `time` and `date` of [format] stay advisory on other fields.
 class Field {
   const Field(
     this.name,
@@ -322,6 +355,7 @@ class Field {
     this.description,
     this.fromQuestion,
     this.format,
+    this.participantEditable = false,
   });
 
   final String name;
@@ -371,10 +405,22 @@ class Field {
   /// `string` fields `start` and `end`. Each part has `format: time` or
   /// `format: date`.
   ///
-  /// Advisory: read by client forms, never by the validator. Additive to the
-  /// frozen wire shape — absent for every field that has none, so
-  /// pre-existing descriptors are byte-identical.
+  /// Advisory for `time` and `date`: read by client forms, never by the
+  /// validator. [Field.fromJson] checks `time_span` and `date_span` against
+  /// the span object shape. Additive to the frozen wire shape — absent for
+  /// every field that has none, so pre-existing descriptors are
+  /// byte-identical.
   final String? format;
+
+  /// Whether a participant can edit this settings field in the mobile app,
+  /// serialised as `participant_editable` in the descriptor.
+  ///
+  /// Valid only on a field that has an [editKind]. [Field.fromJson] rejects
+  /// `participant_editable: true` on all other fields. The server enforces
+  /// the [constraint] bounds on every settings write. Additive to the frozen
+  /// wire shape — serialised only when true, so pre-existing descriptors are
+  /// byte-identical.
+  final bool participantEditable;
 
   /// The [format] value for an `HH:mm` clock time on a `string` field.
   static const String formatTime = 'time';
@@ -467,7 +513,13 @@ class Field {
     if (format != null && (format is! String || format.isEmpty)) {
       throw FormatException(_at(path, '"format" must be a non-empty string'));
     }
-    return Field(
+    final participantEditable = json['participant_editable'];
+    if (participantEditable != null && participantEditable is! bool) {
+      throw FormatException(
+        _at(path, '"participant_editable" must be a bool'),
+      );
+    }
+    final field = Field(
       name,
       TypeSpec.fromJson(json['type'], path: '$path.type'),
       required: required != false,
@@ -479,7 +531,62 @@ class Field {
       description: description as String?,
       fromQuestion: fromQuestion as String?,
       format: format as String?,
+      participantEditable: participantEditable == true,
     );
+    field._checkEditContract(path);
+    return field;
+  }
+
+  /// The edit kinds that take string bounds.
+  static const Set<SettingsEditKind> _stringBoundKinds = {
+    SettingsEditKind.time,
+    SettingsEditKind.date,
+    SettingsEditKind.timeSpan,
+    SettingsEditKind.dateSpan,
+  };
+
+  /// Throws [FormatException] at [path] when the span format, the
+  /// [participantEditable] flag or the bound types do not agree with the
+  /// shape of this field.
+  void _checkEditContract(String path) {
+    final kind = editKind;
+    if (format == formatTimeSpan && kind != SettingsEditKind.timeSpan) {
+      throw FormatException(_at(
+        path,
+        'format "time_span" requires an object with string fields start '
+        'and end (format time)',
+      ));
+    }
+    if (format == formatDateSpan && kind != SettingsEditKind.dateSpan) {
+      throw FormatException(_at(
+        path,
+        'format "date_span" requires an object with string fields start '
+        'and end (format date)',
+      ));
+    }
+    if (participantEditable && kind == null) {
+      throw FormatException(_at(
+        path,
+        'participant_editable requires one of: '
+        '${SettingsEditKind.values.map((k) => k.wireName).join(', ')}',
+      ));
+    }
+    final c = constraint;
+    if (c == null) return;
+    if ((c.numMin != null || c.numMax != null) &&
+        type.type != SchemaType.integer &&
+        type.type != SchemaType.doubleValue) {
+      throw FormatException(
+        _at(path, 'numeric bounds require an int or double field'),
+      );
+    }
+    if ((c.stringMin != null || c.stringMax != null) &&
+        !_stringBoundKinds.contains(kind)) {
+      throw FormatException(_at(
+        path,
+        'string bounds require a time, date, time_span or date_span field',
+      ));
+    }
   }
 
   Map<String, Object?> toJson() => {
@@ -492,6 +599,7 @@ class Field {
         if (description != null) 'description': description,
         if (fromQuestion != null) 'from_question': fromQuestion,
         if (format != null) 'format': format,
+        if (participantEditable) 'participant_editable': true,
       };
 }
 
