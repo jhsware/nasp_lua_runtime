@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.8.0
+
+Participant-editable settings schema. Contract versions are unchanged — all
+three kinds stay `io_contract_version: 2`. A descriptor that uses none of the
+new keys is byte-identical to its 0.7.0 form.
+
+API change: `Constraint.min` and `Constraint.max` are now `Object?` (a `num`
+or a `String`). They were `num?`. Read a bound with the typed getters
+`numMin`, `numMax`, `stringMin` and `stringMax`. Do not cast the fields.
+
+- `Field.participantEditable` (wire key `participant_editable`, a bool).
+  Absent means false. It is serialised only when true. When it is true, the
+  participant can edit the settings field in the mobile app (Settings >
+  Personalise).
+- `SettingsEditKind` and `Field.editKind`. A participant-editable field must
+  have one of six edit kinds. The kind follows from the shape of the field:
+
+  | kind | wire shape | bounds |
+  | --- | --- | --- |
+  | `integer` | type `int` | numbers |
+  | `decimal` | type `double` | numbers |
+  | `time` | type `string`, `format: time` | `HH:mm` strings |
+  | `date` | type `string`, `format: date` | `yyyy-MM-dd` strings |
+  | `time_span` | type `object`, `format: time_span`, exactly the `string` fields `start` and `end`, each with `format: time` | `HH:mm` strings, applied to `start` and to `end` |
+  | `date_span` | type `object`, `format: date_span`, exactly the `string` fields `start` and `end`, each with `format: date` | `yyyy-MM-dd` strings, applied to `start` and to `end` |
+
+  `Field.editKind` returns null for all other shapes. `SettingsEditKind.wireName`
+  gives the name in the first column. `SettingsEditKind.fromWireName` is the
+  inverse.
+- Format constants: `Field.formatTime`, `Field.formatDate`,
+  `Field.formatTimeSpan` and `Field.formatDateSpan`.
+- String bounds. `constraint.min` and `constraint.max` accept a number or a
+  non-empty string. Any other value is a parse error:
+  `"min" must be a number or a non-empty string`.
+- `Field.fromJson` rejects these combinations with a path-qualified
+  `FormatException`:
+  - `participant_editable` that is not a bool.
+  - `participant_editable: true` on a field without an edit kind.
+  - A number bound on a field that is not `int` or `double`.
+  - A string bound on a field that is not `time`, `date`, `time_span` or
+    `date_span`.
+  - `format: time_span` or `format: date_span` on a field that is not the
+    span object shape.
+  `format: time` and `format: date` stay advisory on other fields.
+- The validator applies string bounds. It compares strings
+  lexicographically, so values must use the canonical `HH:mm` or
+  `yyyy-MM-dd` form. On a span it checks `start` and `end` separately and
+  reports the part path (for example `rule.quiet_hours.end: must be <=
+  22:00`). It does not require `start <= end`, so an overnight time span
+  (22:00-06:00) is valid. Number bounds work as before.
+- `LuaScriptRuntime.version` is `0.8.0`.
+
 ## 0.7.0
 
 Additive. Contract versions are unchanged — all three kinds stay
