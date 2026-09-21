@@ -283,6 +283,94 @@ void main() {
     });
   });
 
+  group('scheduling seed', () {
+    Schema schedInput() => contractFor(ScriptKind.scheduling)!.input;
+
+    Map<String, Object?> validSched() => {
+          'study': <String, Object?>{
+            'timezone': 'Europe/Stockholm',
+            'window': <String, Object?>{
+              'start': '2026-01-01T00:00:00Z',
+              'end': '2026-12-31T00:00:00Z',
+            },
+            'horizon_days': 7,
+          },
+          'settings': <String, Object?>{
+            'id': 's1',
+            'scope': 'study',
+            'version': 1,
+            'state': 'published',
+            'rule': <String, Object?>{},
+          },
+          'signals': <String, Object?>{
+            'participant_id': 'p1',
+            'enrolment_date': '2026-01-01T00:00:00Z',
+          },
+          'now': '2026-06-01T00:00:00Z',
+        };
+
+    test('is optional — an input without it still validates', () {
+      final out = schedInput()
+          .validate(validSched(), part: ScriptKind.scheduling, input: true);
+      expect(out.containsKey('seed'), isFalse);
+    });
+
+    test('an integer seed is coerced through', () {
+      final input = validSched();
+      input['seed'] = 12345;
+      final out = schedInput()
+          .validate(input, part: ScriptKind.scheduling, input: true);
+      expect(out['seed'], 12345);
+    });
+
+    test('explicit null is accepted and behaves like absent', () {
+      final input = validSched();
+      input['seed'] = null;
+      final out = schedInput()
+          .validate(input, part: ScriptKind.scheduling, input: true);
+      expect(out['seed'], isNull);
+    });
+
+    test('a non-integer seed is rejected with a path-qualified error', () {
+      final input = validSched();
+      input['seed'] = 'x';
+      expect(
+        () => schedInput()
+            .validate(input, part: ScriptKind.scheduling, input: true),
+        throwsA(isA<ScriptError>()
+            .having((e) => e.type, 'type', ScriptErrorType.inputInvalid)
+            .having((e) => e.path, 'path', 'seed')),
+      );
+    });
+
+    test('descriptor serialises seed the way it serialises an optional int',
+        () {
+      final fields = (contractFor(ScriptKind.scheduling)!.toJson()['input']
+          as Map)['fields'] as List;
+      final seed =
+          fields.firstWhere((f) => (f as Map)['name'] == 'seed') as Map;
+      expect(
+          jsonEncode(seed),
+          '{"name":"seed","type":{"type":"int"},"required":false,'
+          '"nullable":true}');
+      // The same optional/nullable shape study.length_days carries, so the
+      // field costs nothing to a host or a bundle that does not use it.
+      final study =
+          fields.firstWhere((f) => (f as Map)['name'] == 'study') as Map;
+      final lengthDays = ((study['type'] as Map)['fields'] as List)
+          .firstWhere((f) => (f as Map)['name'] == 'length_days') as Map;
+      expect(seed['required'], lengthDays['required']);
+      expect(seed['nullable'], lengthDays['nullable']);
+    });
+
+    test('the additive field leaves the contract version at 2', () {
+      expect(contractFor(ScriptKind.scheduling)!.ioContractVersion, 2);
+      expect(
+          contractFor(ScriptKind.scheduling)!.toJson()['io_contract_version'],
+          2);
+    });
+  });
+
   group('wire-shape parsing (Schema.fromJson)', () {
     test('round-trips a schema with every scalar type and constraints', () {
       final schema = Schema([
