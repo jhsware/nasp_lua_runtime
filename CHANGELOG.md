@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.9.0
+
+Optional top-level `seed` on the `scheduling` contract. Contract versions are
+unchanged — all three kinds stay `io_contract_version: 2`. A descriptor that
+does not use it is byte-identical to its 0.8.0 form.
+
+- `scheduling` input: `seed`, an optional nullable `int`, next to `now`. A
+  scheduling script can read `input.seed`; the host declares the seed it gave
+  the sandbox `random()`, on the same footing as `question_selection` and
+  `follow_up`, where `seed` is required.
+- Hosts should seed the scheduling run from the participant id and the call
+  time, as they do for the other kinds (server `docs/design/scripting.md`
+  §9.1). Without a seed the sandbox `random()` starts from 0, so every
+  participant gets the same sequence on every run.
+- No migration. A host that sends no `seed` behaves as it did in 0.8.0.
+
 ## 0.8.0
 
 Participant-editable settings schema. Contract versions are unchanged — all
