@@ -14,7 +14,8 @@
 ///    participant's identity (`participant_id`) and `enrolment_date`; later
 ///    device telemetry such as location and usage (additive). Anything
 ///    participant-specific is a signal.
-///  - top-level — invocation values from the host: the wall-clock `now`.
+///  - top-level — invocation values from the host: the wall-clock `now` and
+///    an optional `seed` for host-provided randomness.
 ///
 /// When `study.length_days` is given, the participant's effective study end is
 /// `signals.enrolment_date + study.length_days`, clamped to `study.window.end`;
@@ -31,6 +32,7 @@ import '../schema.dart';
 ///
 /// 2 (0.6.0): grouped input — `study` / `settings` / `signals` / invocation
 /// values; `signals.participant_id` added.
+/// 2 (0.9.0): optional top-level `seed` added — additive, no bump.
 const int schedulingContractVersion = 2;
 
 /// The global Lua function the runtime invokes: `schedule(input) -> output`.
@@ -85,8 +87,10 @@ final ContractDescriptor schedulingContract = ContractDescriptor(
           constraint: const Constraint(nonEmpty: true)),
       Field('enrolment_date', TypeSpec.timestamp()),
     ])),
-    // Invocation value from the host: the current wall-clock instant.
+    // Invocation values from the host: the current wall-clock instant.
     Field('now', TypeSpec.timestamp()),
+    // Optional host seed for random(); the host also seeds the sandbox with it.
+    Field('seed', TypeSpec.integer(), required: false, nullable: true),
   ]),
   output: Schema([
     Field(

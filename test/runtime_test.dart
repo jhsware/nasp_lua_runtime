@@ -335,6 +335,57 @@ end
       expect(a.ok && b.ok, isTrue, reason: a.error?.toString());
       expect(scriptValueToJson(a.output), scriptValueToJson(b.output));
     });
+
+    // The scheduling part is seeded the same way (0.9.0): the host passes the
+    // seed to the runtime and declares it on the input.
+    const schedSrc = r'''
+function schedule(input)
+  log(tostring(random(1000)))
+  log(tostring(random(1000)))
+  return { triggers = {} }
+end
+''';
+
+    test('scheduling: the same host seed gives the same values', () {
+      final a = _runtime.run(ScriptKind.scheduling, schedSrc,
+          _schedulingInput(), seed: 7);
+      final b = _runtime.run(ScriptKind.scheduling, schedSrc,
+          _schedulingInput(), seed: 7);
+      expect(a.ok && b.ok, isTrue, reason: a.error?.toString());
+      expect(a.trace.length, 2);
+      expect(a.trace, b.trace);
+    });
+
+    test('scheduling: a different host seed gives different values', () {
+      final a = _runtime.run(ScriptKind.scheduling, schedSrc,
+          _schedulingInput(), seed: 7);
+      final c = _runtime.run(ScriptKind.scheduling, schedSrc,
+          _schedulingInput(), seed: 8);
+      expect(a.ok && c.ok, isTrue, reason: a.error?.toString());
+      expect(a.trace, isNot(c.trace));
+    });
+
+    test('scheduling: a seed on the input validates and reaches the script',
+        () {
+      const src = r'''
+function schedule(input)
+  if input.seed == 12345 then log("seed-ok") else log("seed-bad") end
+  return { triggers = {} }
+end
+''';
+      final input = _schedulingInput();
+      input['seed'] = 12345;
+      final r = _runtime.run(ScriptKind.scheduling, src, input, seed: 12345);
+      expect(r.ok, isTrue, reason: r.error?.toString());
+      expect(r.trace, ['seed-ok']);
+    });
+
+    test('scheduling: an input without a seed still runs', () {
+      final r = _runtime.run(ScriptKind.scheduling, schedSrc,
+          _schedulingInput());
+      expect(r.ok, isTrue, reason: r.error?.toString());
+      expect(r.trace.length, 2);
+    });
   });
 
   group('error taxonomy', () {
@@ -539,7 +590,7 @@ end
 
   group('contract v2', () {
     const expectedInputFields = <ScriptKind, List<String>>{
-      ScriptKind.scheduling: ['study', 'settings', 'signals', 'now'],
+      ScriptKind.scheduling: ['study', 'settings', 'signals', 'now', 'seed'],
       ScriptKind.questionSelection: [
         'study',
         'settings',

@@ -107,7 +107,8 @@ Per kind:
 
 - `scheduling` — `schedule(input)`: `study {timezone, window, horizon_days,
   length_days?}`, `settings`, `signals {participant_id, enrolment_date}`,
-  `now`.
+  `now`, `seed?`. The seed is optional here (0.9.0); it is required on the
+  other two kinds. A host that sends none leaves `random()` seeded with 0.
 - `question_selection` — `select_questions(input)`: `study {question_sets,
   questions}`, `settings?`, `signals {participant_id, answers}`, `trigger`,
   `seed`.
@@ -139,7 +140,7 @@ dependencies:
   nasp_lua_runtime:
     git:
       url: <this repository>
-      ref: v0.8.0
+      ref: v0.9.0
 ```
 
 The conformance test suite (`dart test`) is the acceptance gate for any future

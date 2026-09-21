@@ -18,6 +18,8 @@
 ///    variables), `settings` (the resolved script settings), `signals`
 ///    (participant-specific data — anything participant-specific is a
 ///    signal) and top-level invocation values (`now`, `seed`, `trigger`).
+///    Every kind takes a `seed`: required on `question_selection` and
+///    `follow_up`, optional on `scheduling`.
 library;
 
 export 'src/contracts/contracts.dart';
