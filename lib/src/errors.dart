@@ -6,9 +6,13 @@
 /// simulation) can attribute failures precisely.
 library;
 
-/// The kinds of script a bundle contains. Each kind selects an input schema,
-/// an output schema, an entry-point signature, and a simulation harness
-/// (scripting.md §3.1). Closed enum in code, designed for extension.
+/// The kinds of script that the runtime knows. Each kind selects an input
+/// schema, an output schema, an entry-point signature, and a simulation
+/// harness (scripting.md §3.1). Closed enum in code, designed for extension.
+///
+/// Not every kind is a part of a script bundle. A bundle contains the kinds of
+/// [bundleParts]. Use [bundleParts], not [values], where you mean "the parts
+/// of a bundle".
 enum ScriptKind {
   /// Decide the trigger times for a participant over a horizon.
   scheduling('scheduling'),
@@ -18,13 +22,27 @@ enum ScriptKind {
 
   /// Decide whether an answered round triggers a follow-up round (now or
   /// later).
-  followUp('follow_up');
+  followUp('follow_up'),
+
+  /// Decide which follow-up questions of a branched question to ask next.
+  ///
+  /// This kind is the script of a branched question. It is never a part of a
+  /// bundle (branched-questions.md §6.1).
+  questionFollowUp('question_follow_up');
 
   const ScriptKind(this.id);
 
   /// Stable id string — the manifest key, the git file stem, and the wire
   /// value used by the REST API (`?kind=`).
   final String id;
+
+  /// The kinds that are parts of a script bundle, in manifest order.
+  /// A bundle never has a `question_follow_up` part.
+  static const List<ScriptKind> bundleParts = [
+    scheduling,
+    questionSelection,
+    followUp,
+  ];
 
   /// Resolve a [ScriptKind] from its [id], or null if unknown.
   static ScriptKind? fromId(String id) {

@@ -13,9 +13,12 @@ component that must be **byte-identical** in every host that executes scripts
   `run(kind, source, input, {now, seed, budget})` validates the typed input,
   executes one script part, validates the output, and maps every failure onto
   the `ScriptError` taxonomy. `compile(kind, source)` is the static check.
-- Per-kind **I/O contracts** (`scheduling`, `question_selection`,
-  `follow_up`) with `io_contract_version = 2`, serialisable as the contract
-  descriptor served by `GET /script-bundles/contracts?kind=`.
+- Per-kind **I/O contracts**: the bundle kinds (`scheduling`,
+  `question_selection`, `follow_up`, listed in `ScriptKind.bundleParts`) with
+  `io_contract_version = 2`, and `question_follow_up` (the script of a
+  branched question, never a bundle part) with `io_contract_version = 1`.
+  Each is serialisable as the contract descriptor served by
+  `GET /script-bundles/contracts?kind=`.
 - The explicit **schema type + validator** (path-qualified errors) and total,
   lossless **Dart↔Lua marshalling** (timestamps ↔ epoch seconds, int/double
   preserved). `Field` carries three advisory slots for bundle-declared
@@ -99,6 +102,7 @@ script author where a value comes from:
 | group | contents | example paths |
 | --- | --- | --- |
 | `input.study` | Study variables — the same for every participant of the study. | `study.timezone`, `study.window.start`, `study.horizon_days`, `study.length_days`, `study.question_sets`, `study.questions` |
+| `input.question` | `question_follow_up` only. The branched question and its members — the same for every participant. | `question.id`, `question.root_question_id`, `question.questions` |
 | `input.settings` | The resolved script settings. A participant-scope override wins over the study scope; `settings.rule` carries the script-specific keys. | `settings.rule` |
 | `input.signals` | Participant-specific data the script analyses. **Anything participant-specific is a signal.** Device telemetry (location, usage) will be added here later, additively. | `signals.participant_id`, `signals.enrolment_date`, `signals.answers`, `signals.current_round`, `signals.recent_rounds`, `signals.schedule` |
 | top-level | Invocation values from the host. | `now`, `seed`, `trigger` |
@@ -108,18 +112,25 @@ Per kind:
 - `scheduling` — `schedule(input)`: `study {timezone, window, horizon_days,
   length_days?}`, `settings`, `signals {participant_id, enrolment_date}`,
   `now`, `seed?`. The seed is optional here (0.9.0); it is required on the
-  other two kinds. A host that sends none leaves `random()` seeded with 0.
+  other kinds. A host that sends none leaves `random()` seeded with 0.
 - `question_selection` — `select_questions(input)`: `study {question_sets,
   questions}`, `settings?`, `signals {participant_id, answers}`, `trigger`,
   `seed`.
 - `follow_up` — `follow_up(input)`: `settings?`, `signals {participant_id,
   current_round, recent_rounds, schedule}`, `now`, `seed`. No `study` group
   yet (adding one later is additive).
+- `question_follow_up` — `follow_up_questions(input)` (0.10.0, contract
+  version 1): `question {id, root_question_id, questions}`, `signals
+  {participant_id, answers}`, `now`, `seed`. The script of a branched
+  question. It is not a bundle part (see `ScriptKind.bundleParts`). The
+  `question` group holds the branched question and its members; it is the
+  same for each participant. Each answer carries its `values`. The output is
+  `questions` (a list of `{id}`) and `reason`, both optional.
 
-Outputs are unchanged from v1. A v1-shaped (flat) input is rejected with a
-path-qualified `inputInvalid` error at the first missing group. The prose
-documentation of every field lives in the server's input reference, not in
-this package.
+The outputs of the bundle kinds are unchanged from their v1. A v1-shaped
+(flat) bundle input is rejected with a path-qualified `inputInvalid` error at
+the first missing group. The prose documentation of every field lives in the
+server's input reference, not in this package.
 
 ## Sandbox guarantees
 
@@ -140,7 +151,7 @@ dependencies:
   nasp_lua_runtime:
     git:
       url: <this repository>
-      ref: v0.9.0
+      ref: v0.10.0
 ```
 
 The conformance test suite (`dart test`) is the acceptance gate for any future

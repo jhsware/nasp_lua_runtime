@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.10.0
+
+A fourth script kind, `question_follow_up`, for the script of a branched
+question (server `docs/design/branched-questions.md` §6). It is never a part
+of a script bundle. The three bundle contracts are unchanged.
+
+- `ScriptKind.questionFollowUp` (id `question_follow_up`), the last value of
+  the enum, and its contract `questionFollowUpContract` in
+  `lib/src/contracts/question_follow_up.dart`, registered in
+  `scriptContracts`. Entry point `follow_up_questions(input)`
+  (`questionFollowUpEntrypoint`). Contract version 1
+  (`questionFollowUpContractVersion`).
+  - Input: `question {id, root_question_id, questions}` (each member has
+    `id`, `role` (`root` or `follow_up`), `type`, `tags` and `position`),
+    `signals {participant_id, answers}` (each answer has `question_id`,
+    `values` and `answered_at`; an empty `values` list is a skipped
+    question), `now` and `seed`. Each field is required. There is no
+    `study`, `settings` or `trigger` group.
+  - Output: `questions` (an optional, nullable list of `{id}`) and `reason`
+    (an optional, nullable string). Absent, null or an empty list means "the
+    presentation is complete". The output contains only question ids.
+- `ScriptKind.bundleParts`: the kinds that are parts of a bundle, in manifest
+  order (`scheduling`, `question_selection`, `follow_up`). `ScriptKind.values`
+  now also contains `questionFollowUp`. A host that iterates
+  `ScriptKind.values` to mean "the parts of a bundle" must change to
+  `ScriptKind.bundleParts`.
+- The `scheduling`, `question_selection` and `follow_up` contracts are
+  unchanged. They stay `io_contract_version: 2`, and their descriptors are
+  byte-identical to 0.9.0.
+- `LuaScriptRuntime.version` is `0.10.0`.
+
 ## 0.9.0
 
 Optional top-level `seed` on the `scheduling` contract. Contract versions are

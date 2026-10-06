@@ -601,8 +601,11 @@ end
       ScriptKind.followUp: ['settings', 'signals', 'now', 'seed'],
     };
 
-    test('every kind is io_contract_version 2 with the grouped input', () {
-      for (final kind in ScriptKind.values) {
+    // question_follow_up is not a bundle part and has its own contract
+    // version 1 (test/question_follow_up_contract_test.dart).
+    test('every bundle kind is io_contract_version 2 with the grouped input',
+        () {
+      for (final kind in ScriptKind.bundleParts) {
         final d = contractFor(kind)!;
         expect(d.ioContractVersion, 2, reason: kind.id);
         final json = d.toJson();
