@@ -21,8 +21,13 @@
 ///    The `question_follow_up` kind (contract v1, never a bundle part; see
 ///    [ScriptKind.bundleParts]) has the group `question` (the branched
 ///    question and its members), `signals`, `now` and `seed`.
+///    The `question_dynamic` kind (contract v1, never a bundle part) has the
+///    groups `question` (the members with `dynamic`, the base `text` and the
+///    base `options`), `step` (`index`, `question_ids`), `signals` (with
+///    `earlier_presentations`), `now` and `seed`.
 ///    Every kind takes a `seed`: required on `question_selection`,
-///    `follow_up` and `question_follow_up`, optional on `scheduling`.
+///    `follow_up`, `question_follow_up` and `question_dynamic`, optional on
+///    `scheduling`.
 library;
 
 export 'src/contracts/contracts.dart';

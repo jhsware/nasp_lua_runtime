@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.11.0
+
+A fifth script kind, `question_dynamic`, for the dynamic questions script of
+a branched question (server `docs/design/dynamic-questions.md` §6). It is
+never a part of a script bundle. The four other contracts are unchanged.
+
+- `ScriptKind.questionDynamic` (id `question_dynamic`), the last value of the
+  enum, and its contract `questionDynamicContract` in
+  `lib/src/contracts/question_dynamic.dart`, registered in `scriptContracts`.
+  Entry point `dynamic_questions(input)` (`questionDynamicEntrypoint`).
+  Contract version 1 (`questionDynamicContractVersion`).
+  - Input: `question {id, root_question_id, questions}` (each member has
+    `id`, `role` (`root` or `follow_up`), `type`, `tags`, `position`,
+    `dynamic`, the base `text` and the base `options`, each option with
+    `label`, `value` and `position`), `step {index, question_ids}`,
+    `signals {participant_id, answers, earlier_presentations}` (each answer
+    has `question_id`, `values` and `answered_at`; each earlier presentation
+    has `schedule_entry_id`, `answered_at` and `answers`), `now` and `seed`.
+    Each field is required. There is no `study`, `settings` or `trigger`
+    group and no `type_config`.
+  - Output: `questions` (an optional, nullable list; each item has `id` and
+    the optional, nullable `text`, `options` (a list of `{label, value}`, with
+    no position) and `key`) and `reason` (an optional, nullable string).
+    Absent, null or an empty list means "each question of the step keeps its
+    base content". The output has no `type` or `type_config` field; the
+    validator drops a key that the schema does not declare.
+- `ScriptKind.values` now has five values. `ScriptKind.bundleParts` has three
+  values and does not change.
+- The `scheduling`, `question_selection`, `follow_up` and
+  `question_follow_up` contracts are unchanged. The bundle kinds stay
+  `io_contract_version: 2` and `question_follow_up` stays 1; their
+  descriptors are byte-identical to 0.10.0.
+- `LuaScriptRuntime.version` is `0.11.0`.
+
 ## 0.10.0
 
 A fourth script kind, `question_follow_up`, for the script of a branched

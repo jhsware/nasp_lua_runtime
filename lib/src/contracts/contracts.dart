@@ -7,11 +7,13 @@ library;
 import '../errors.dart';
 import '../schema.dart';
 import 'follow_up.dart';
+import 'question_dynamic.dart';
 import 'question_follow_up.dart';
 import 'question_selection.dart';
 import 'scheduling.dart';
 
 export 'follow_up.dart';
+export 'question_dynamic.dart';
 export 'question_follow_up.dart';
 export 'question_selection.dart';
 export 'scheduling.dart';
@@ -23,6 +25,7 @@ final Map<ScriptKind, ContractDescriptor> scriptContracts =
   ScriptKind.questionSelection: questionSelectionContract,
   ScriptKind.followUp: followUpContract,
   ScriptKind.questionFollowUp: questionFollowUpContract,
+  ScriptKind.questionDynamic: questionDynamicContract,
 });
 
 /// The contract descriptor for [kind], or null if the host has none.

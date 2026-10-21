@@ -251,11 +251,12 @@ end
           isNot(contains(ScriptKind.questionFollowUp)));
     });
 
-    test('questionFollowUp is the last value and resolves from its id', () {
-      expect(ScriptKind.values.last, ScriptKind.questionFollowUp);
+    test('questionFollowUp resolves from its id and is not a bundle part', () {
       expect(ScriptKind.questionFollowUp.id, 'question_follow_up');
       expect(ScriptKind.fromId('question_follow_up'),
           ScriptKind.questionFollowUp);
+      expect(ScriptKind.bundleParts,
+          isNot(contains(ScriptKind.questionFollowUp)));
     });
   });
 }
