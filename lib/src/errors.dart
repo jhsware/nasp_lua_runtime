@@ -28,7 +28,14 @@ enum ScriptKind {
   ///
   /// This kind is the script of a branched question. It is never a part of a
   /// bundle (branched-questions.md §6.1).
-  questionFollowUp('question_follow_up');
+  questionFollowUp('question_follow_up'),
+
+  /// Decide the text and the options of the dynamic members of a branched
+  /// question for one step of a presentation.
+  ///
+  /// This kind is the dynamic questions script of a branched question. It is
+  /// never a part of a bundle (dynamic-questions.md §6.1).
+  questionDynamic('question_dynamic');
 
   const ScriptKind(this.id);
 
@@ -37,7 +44,7 @@ enum ScriptKind {
   final String id;
 
   /// The kinds that are parts of a script bundle, in manifest order.
-  /// A bundle never has a `question_follow_up` part.
+  /// A bundle never has a `question_follow_up` or a `question_dynamic` part.
   static const List<ScriptKind> bundleParts = [
     scheduling,
     questionSelection,
