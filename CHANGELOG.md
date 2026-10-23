@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.12.0
+
+The string functions that would use a Lua pattern fail with a clear error.
+The Lua engine (`lua_dardo_plus`) does not support the Lua patterns. In
+0.11.0 some pattern calls gave a wrong result with no error (`s:find("%d")`
+and `s:match("(%a+)=(%a+)")` gave nil, `[a-z_]+` gave a wrong end position),
+and `gmatch`, `gsub` with a function or a table and `reverse` gave an unclear
+engine error. A script could look correct and give a wrong result.
+
+- The rule. A text is a pattern when it contains one of `^ $ * + ? . ( ) [ ]
+  % -`. `string.find(s, p, init, plain)` is allowed when `plain` is true or
+  `p` is not a pattern. `string.match(s, p, init)` is allowed when `p` is not
+  a pattern. `string.gsub(s, p, repl, n)` is allowed when `p` is not a pattern
+  and `repl` is a string (or a number) without `%`. `string.gmatch` and
+  `string.reverse` always raise an error (the engine implementation of
+  `reverse` is broken). The guards apply through `string.find(...)` and
+  through the method syntax `s:find(...)`; the original functions are not
+  reachable from a script.
+- The message form: `string.<name>: Lua patterns are not supported; use
+  <hint>`. Hints: `s:find(text, init, true)` (find, match); `a loop with
+  s:find(text, init, true) and s:sub(i, j)` (gmatch, gsub); `a replacement
+  without %` (gsub with `%` in the replacement); `a loop with s:sub(i, i)`
+  (reverse). The engine adds no line number to an error raised with
+  `error()`; the function name in the message locates the call.
+- `#s` on a string stays an engine error (the length operator works only on
+  tables); the runtime appends `; use s:len() for the length of a string` to
+  the message when the error leaves Lua (`ScriptError.message`).
+- `LuaScriptRuntime.compile` and `run` both have the guards: a forbidden call
+  in the top-level chunk fails `compile`; a forbidden call in the entry point
+  fails `run` with a `runtime` error.
+- Implementation: `lib/src/string_guards.dart` (`installStringGuards`, the
+  Lua prelude `stringGuardPrelude`, the predicate `isLuaPattern`), called
+  from the sandbox setup. The allowed calls run the original functions, so
+  their results are the same as in 0.11.0.
+- Compatibility: the five contracts are unchanged (descriptors byte-identical
+  to 0.11.0). A script that used a pattern got a wrong or unpredictable
+  result before and gets a script error now; the hosts handle a script
+  failure with their fallback (the base questions, a bundle fallback). The
+  hosts move together: the server and the mobile app pin `v0.12.0`. Search
+  the stored scripts of each deployment before the release.
+- `LuaScriptRuntime.version` is `0.12.0`.
+
 ## 0.11.0
 
 A fifth script kind, `question_dynamic`, for the dynamic questions script of

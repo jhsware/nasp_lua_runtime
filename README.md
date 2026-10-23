@@ -155,6 +155,32 @@ Budgets (host-call count, wall-clock, trace cap, output size) are enforced per
 invocation. Note: a hard instruction-count budget for pure CPU loops is
 deferred — the engine exposes only a line/breakpoint hook.
 
+## String functions
+
+The engine does not support the Lua patterns. Since 0.12.0 a string function
+that would use a pattern raises a clear error instead of a silent wrong
+result. A text is a *pattern* when it contains one of the special characters
+`^ $ * + ? . ( ) [ ] % -`.
+
+| call | rule |
+| --- | --- |
+| `s:find(p, init, plain)` | allowed when `plain` is true, or when `p` is not a pattern |
+| `s:match(p, init)` | allowed when `p` is not a pattern |
+| `s:gsub(p, repl, n)` | allowed when `p` is not a pattern and `repl` is a string (or a number) without `%` |
+| `s:gmatch(p)` | always an error |
+| `s:reverse()` | always an error |
+| `sub`, `len`, `upper`, `lower`, `rep`, `byte`, `char`, `string.format` | unchanged |
+
+A forbidden call raises `string.<name>: Lua patterns are not supported; use
+<hint>`, with the hint `s:find(text, init, true)`, `a loop with s:find(text,
+init, true) and s:sub(i, j)`, `a replacement without %` or `a loop with
+s:sub(i, i)`. The engine adds no line number to this error; the function name
+locates the call. `#s` on a string is an engine error; the runtime appends
+`use s:len() for the length of a string` to the message. The guards apply
+through `string.find(...)` and through `s:find(...)`, in `compile` and in
+`run`. The tests are in `test/string_guards_test.dart`; the rule for script
+authors is in `nasp_waves_server/docs/design/scripting.md` §6.2.
+
 ## Consuming
 
 Depend on this package via a `git:` dependency **pinned to a tag/commit** so
@@ -165,7 +191,7 @@ dependencies:
   nasp_lua_runtime:
     git:
       url: <this repository>
-      ref: v0.11.0
+      ref: v0.12.0
 ```
 
 The conformance test suite (`dart test`) is the acceptance gate for any future

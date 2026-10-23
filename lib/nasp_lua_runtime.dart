@@ -8,6 +8,12 @@
 ///
 /// Public surface:
 ///  - [LuaScriptRuntime] — the sandboxed, deterministic execution engine.
+///    The sandbox has base + `math` + `string` + `table` and the host
+///    functions `now`, `random`, `log`. The engine does not support the Lua
+///    patterns: a string function that would use one (`find`/`match` with a
+///    pattern and not plain, `gmatch`, `gsub` with a pattern, a function, a
+///    table or `%` in the replacement, `reverse`) raises a clear error
+///    (`string.<name>: Lua patterns are not supported; use <hint>`).
 ///  - [ScriptError] / [ScriptErrorType] / [ScriptKind] — the cross-host error
 ///    taxonomy (§6.4).
 ///  - The schema types ([Schema], [TypeSpec], [Field], [Constraint]) and the
