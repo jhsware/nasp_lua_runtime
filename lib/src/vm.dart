@@ -16,6 +16,7 @@ import 'package:lua_dardo_plus/lua.dart';
 import 'contracts/contracts.dart';
 import 'errors.dart';
 import 'marshal.dart';
+import 'string_guards.dart';
 
 /// Per-invocation execution budget (§6.3). Budgets apply per part invocation.
 ///
@@ -96,7 +97,7 @@ class LuaScriptRuntime {
   /// bundle's `runtime_min_version` against this constant to decide whether it
   /// can execute the bundle. `test/version_test.dart` guards the two against
   /// drift.
-  static const String version = '0.11.0';
+  static const String version = '0.12.0';
 
   /// Execute one [kind] part.
   ///
@@ -211,7 +212,7 @@ class LuaScriptRuntime {
     String? protectedCall(int nargs, int nresults) {
       try {
         if (ls.pCall(nargs, nresults, 0) != ThreadStatus.luaOk) {
-          return ls.toStr(-1) ?? 'runtime error';
+          return _withHints(ls.toStr(-1) ?? 'runtime error');
         }
         return null;
       } on _BudgetExceeded {
@@ -318,7 +319,7 @@ class LuaScriptRuntime {
         return ScriptError(
           type: ScriptErrorType.runtime,
           part: kind,
-          message: ls.toStr(-1) ?? 'runtime error',
+          message: _withHints(ls.toStr(-1) ?? 'runtime error'),
         );
       }
     } catch (e) {
@@ -343,6 +344,8 @@ class LuaScriptRuntime {
   /// (§6.2): no `io`/`os`/`package`/`require`/`dofile`/`loadfile`/`load`/
   /// `debug`/`print`, and no nondeterministic `math.random`. What remains is
   /// base + `math` + `string` + `table` (plus injected `now`/`random`/`log`).
+  /// The string functions that would use a Lua pattern are wrapped so that
+  /// they raise a clear error (`string_guards.dart`).
   void _sealSandbox(LuaState ls) {
     const dangerous = <String>[
       'io',
@@ -369,6 +372,7 @@ class LuaScriptRuntime {
       ls.setField(-2, 'randomseed');
     }
     ls.pop(1);
+    installStringGuards(ls);
   }
 }
 
@@ -376,7 +380,18 @@ class LuaScriptRuntime {
 String _luaMessage(Object e) {
   final s = e.toString();
   const prefix = 'Exception: ';
-  return s.startsWith(prefix) ? s.substring(prefix.length) : s;
+  return _withHints(s.startsWith(prefix) ? s.substring(prefix.length) : s);
+}
+
+/// Append a hint to an engine error message that a script author cannot act
+/// on without one. `#s` on a string is an error in this engine (the length
+/// operator works only on tables); the hint names `s:len()`.
+String _withHints(String message) {
+  const lengthOfString = 'attempt to get length of a string value';
+  if (message.contains(lengthOfString) && !message.contains('s:len()')) {
+    return '$message; use s:len() for the length of a string';
+  }
+  return message;
 }
 
 /// Convert a typed script value (as returned on [ScriptRunResult.output]) into
