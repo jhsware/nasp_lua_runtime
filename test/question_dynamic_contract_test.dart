@@ -3,9 +3,10 @@ import 'package:test/test.dart';
 
 const _runtime = LuaScriptRuntime();
 
-// A valid question_dynamic input (contract version 1): the `question` group,
-// the `step` group, the `signals` group and the invocation values `now` and
-// `seed`. The root question r1 is dynamic and has options; f1 is fixed.
+// A valid question_dynamic input (contract version 2): the `question` group,
+// the `step` group, the `signals` group and the invocation values `now`,
+// `zone` and `seed`. The root question r1 is dynamic and has options; f1 is
+// fixed.
 Map<String, Object?> _input({int stepIndex = 1}) => {
   'question': <String, Object?>{
     'id': 'bq1',
@@ -66,6 +67,7 @@ Map<String, Object?> _input({int stepIndex = 1}) => {
     ],
   },
   'now': '2026-06-02T09:05:00.000Z',
+  'zone': 'Europe/Stockholm',
   'seed': 42,
 };
 
@@ -93,23 +95,23 @@ Matcher _inputInvalidAt(String path) => throwsA(
 
 void main() {
   group('question_dynamic descriptor', () {
-    test('has the entry point, contract version 1 and the field names', () {
+    test('has the entry point, contract version 2 and the field names', () {
       final d = contractFor(ScriptKind.questionDynamic)!;
       expect(d.kind, ScriptKind.questionDynamic);
       expect(d.entrypoint, 'dynamic_questions');
       expect(d.entrypoint, questionDynamicEntrypoint);
-      expect(d.ioContractVersion, 1);
+      expect(d.ioContractVersion, 2);
       expect(d.ioContractVersion, questionDynamicContractVersion);
       expect(identical(d, questionDynamicContract), isTrue);
 
       final json = d.toJson();
       expect(json['kind'], 'question_dynamic');
       expect(json['entrypoint'], 'dynamic_questions');
-      expect(json['io_contract_version'], 1);
+      expect(json['io_contract_version'], 2);
       final inNames = ((json['input'] as Map)['fields'] as List)
           .map((f) => (f as Map)['name'])
           .toList();
-      expect(inNames, ['question', 'step', 'signals', 'now', 'seed']);
+      expect(inNames, ['question', 'step', 'signals', 'now', 'zone', 'seed']);
       final outFields = ((json['output'] as Map)['fields'] as List).cast<Map>();
       expect(outFields.map((f) => f['name']).toList(), ['questions', 'reason']);
       for (final f in outFields) {

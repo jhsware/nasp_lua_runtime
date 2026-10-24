@@ -5,6 +5,7 @@
 /// (now or later). The input is grouped by provenance (contract v2), so the
 /// structure itself tells a script author where each value comes from:
 ///
+///  - `study` — study variables: the `zone` of the run (contract v3).
 ///  - `settings` — the resolved script settings (optional; the server hosts
 ///    supply it so a follow-up decision can read `settings.rule`). A
 ///    participant-scope override wins over the study-scope settings.
@@ -15,14 +16,17 @@
 ///    `schedule`; later device telemetry such as location and usage
 ///    (additive). Anything participant-specific is a signal.
 ///  - top-level — invocation values from the host: `now` (the answered
-///    round's completion instant; in simulation this equals the trigger time)
+///    round's completion time; in simulation this equals the trigger time)
 ///    and a `seed` for host-provided randomness.
 ///
-/// There is no `study` group on this kind: it has no study-level values
-/// today. Adding one later is additive.
+/// Every timestamp is local epoch seconds in the zone of the run (contract
+/// v3, docs/design/time-model.md).
 ///
-/// Output is an optional `follow_up` trigger (`trigger_at` + `tag`); a
-/// null/absent value means "no follow-up round".
+/// Output is an optional `follow_up` trigger: `{trigger_at, tag}` (a clock
+/// time, local epoch seconds) or `{trigger_in_seconds, tag}` (a duration
+/// from `now` on the time line; the host adds it to the instant of `now`).
+/// Exactly one of `trigger_at` and `trigger_in_seconds`. A null/absent value
+/// means "no follow-up round".
 ///
 /// Unlike every other kind, this input carries answer *values*: the
 /// "no response values into script inputs" invariant is relaxed for
@@ -38,7 +42,9 @@ import 'scheduling.dart' show resolvedSettingsSpec;
 /// Contract revision (§4.5). Bump only on a breaking change.
 ///
 /// 2 (0.6.0): grouped input — `settings` / `signals` / invocation values.
-const int followUpContractVersion = 2;
+/// 3 (0.13.0): every timestamp is local epoch seconds in the zone of the run;
+/// a `study` group with `zone`; the output accepts `trigger_in_seconds`.
+const int followUpContractVersion = 3;
 
 /// The global Lua function the runtime invokes: `follow_up(input) -> output`.
 const String followUpEntrypoint = 'follow_up';
@@ -54,7 +60,9 @@ const List<String> _roundTypes = ['beep', 'follow_up'];
 /// participant gave at one trigger together with the prompt time
 /// (`scheduled_at`), the response time (`answered_at`), and the response
 /// latency (`delta_seconds`). Each answer carries its `values` — this is the
-/// kind whose input includes answer values.
+/// kind whose input includes answer values. `scheduled_at` and the two
+/// `answered_at` are local epoch seconds in the zone of the run;
+/// `delta_seconds` is a duration on the time line.
 TypeSpec _roundObject() => TypeSpec.object([
   Field('scheduled_at', TypeSpec.timestamp()),
   Field('answered_at', TypeSpec.timestamp()),
@@ -74,11 +82,26 @@ TypeSpec _roundObject() => TypeSpec.object([
 ]);
 
 /// The frozen `follow_up` contract descriptor.
+///
+/// Every timestamp of the input and of the output is local epoch seconds in
+/// the zone of the run (`study.zone`; `time-model.md` R5): the round and
+/// answer times, the schedule entries, `now` and `follow_up.trigger_at`.
 final ContractDescriptor followUpContract = ContractDescriptor(
   kind: ScriptKind.followUp,
   entrypoint: followUpEntrypoint,
   ioContractVersion: followUpContractVersion,
   input: Schema([
+    // Study variables: the IANA zone this run resolves local times in.
+    Field(
+      'study',
+      TypeSpec.object([
+        Field(
+          'zone',
+          TypeSpec.string(),
+          constraint: const Constraint(nonEmpty: true),
+        ),
+      ]),
+    ),
     // The resolved script settings (settings.rule = script-specific
     // settings; participant-scope override wins over study scope). Optional —
     // the server hosts always supply it, legacy hosts may omit it.
@@ -94,11 +117,12 @@ final ContractDescriptor followUpContract = ContractDescriptor(
         ),
         // The round the participant just answered.
         Field('current_round', _roundObject()),
-        // Rounds answered during the 24 h before `now`, grouped per round and
-        // ordered by `scheduled_at`.
+        // Rounds answered during the 24 h before `now` (a duration on the
+        // time line), grouped per round and ordered by `scheduled_at`.
         Field('recent_rounds', TypeSpec.list(_roundObject())),
         // The whole session timeline, so the script can see what is scheduled
-        // and which entries have already been answered.
+        // and which entries have already been answered. trigger_at and
+        // answered_at are local epoch seconds in the zone of the run.
         Field(
           'schedule',
           TypeSpec.list(
@@ -124,17 +148,33 @@ final ContractDescriptor followUpContract = ContractDescriptor(
         ),
       ]),
     ),
-    // Invocation values from the host: the answered round's completion
-    // instant (in simulation this equals the trigger time) and the seed.
+    // Invocation values from the host: the answered round's completion time
+    // (in simulation this equals the trigger time), as local epoch seconds in
+    // the zone of the run, and the seed.
     Field('now', TypeSpec.timestamp()),
     Field('seed', TypeSpec.integer()),
   ]),
   output: Schema([
-    // Absent/null => no follow-up round; otherwise the trigger to schedule.
+    // Absent/null => no follow-up round; otherwise the trigger to schedule:
+    // a clock time (`trigger_at`, local epoch seconds) or a duration from
+    // `now` (`trigger_in_seconds`). Exactly one of the two
+    // (checkFollowUpOutput in output_rules.dart).
     Field(
       'follow_up',
       TypeSpec.object([
-        Field('trigger_at', TypeSpec.timestamp()),
+        Field(
+          'trigger_at',
+          TypeSpec.timestamp(),
+          required: false,
+          nullable: true,
+        ),
+        Field(
+          'trigger_in_seconds',
+          TypeSpec.integer(),
+          required: false,
+          nullable: true,
+          constraint: const Constraint(min: 1),
+        ),
         Field('tag', TypeSpec.string()),
       ]),
       required: false,

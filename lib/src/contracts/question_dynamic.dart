@@ -21,11 +21,14 @@
 ///    `answers` of this presentation in answer order (empty at step 0), and
 ///    the `earlier_presentations` of this branched question by this
 ///    participant, oldest first (empty in the first round).
-///  - top-level — invocation values from the host: `now` and a `seed` for
-///    host-provided randomness.
+///  - top-level — invocation values from the host: `now`, the `zone` of the
+///    run and a `seed` for host-provided randomness.
 ///
-/// There is no `study`, `settings` or `trigger` group and no `type_config`
-/// in contract version 1. Adding an optional field later is additive.
+/// Every timestamp (`now`, each `answered_at`) is local epoch seconds in the
+/// zone of the run (contract 2, docs/design/time-model.md).
+///
+/// There is no `study`, `settings` or `trigger` group and no `type_config`.
+/// Adding an optional field later is additive.
 ///
 /// The output is an optional `questions` list with one item for each question
 /// to change (`id`, and optional `text`, `options` and `key`) and an optional
@@ -42,7 +45,9 @@ import '../schema.dart';
 /// Contract revision (§4.5). Bump only on a breaking change.
 ///
 /// 1 (0.11.0): `question` / `step` / `signals` / invocation values.
-const int questionDynamicContractVersion = 1;
+/// 2 (0.13.0): every timestamp is local epoch seconds in the zone of the run;
+/// a top-level `zone` (required).
+const int questionDynamicContractVersion = 2;
 
 /// The global Lua function the runtime invokes:
 /// `dynamic_questions(input) -> output`.
@@ -134,8 +139,14 @@ final ContractDescriptor questionDynamicContract = ContractDescriptor(
         ),
       ]),
     ),
-    // Invocation values from the host.
+    // Invocation values from the host: now (local epoch seconds in the zone
+    // of the run), the IANA zone of the run, and the seed.
     Field('now', TypeSpec.timestamp()),
+    Field(
+      'zone',
+      TypeSpec.string(),
+      constraint: const Constraint(nonEmpty: true),
+    ),
     Field('seed', TypeSpec.integer()),
   ]),
   output: Schema([

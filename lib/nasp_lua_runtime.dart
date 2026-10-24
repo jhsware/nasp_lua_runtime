@@ -27,20 +27,24 @@
 ///    per-kind [ContractDescriptor]s consumed by `GET /script-bundles/contracts`.
 ///  - [SettingsEditKind] — the six kinds of a participant-editable settings
 ///    field (see [Field.editKind]).
-///    Contract v2 groups every bundle input by provenance: `study` (study
-///    variables), `settings` (the resolved script settings), `signals`
-///    (participant-specific data — anything participant-specific is a
-///    signal) and top-level invocation values (`now`, `seed`, `trigger`).
-///    The `question_follow_up` kind (contract v1, never a bundle part; see
+///    The bundle kinds (contract v3) group every input by provenance: `study`
+///    (study variables, with the `zone` of the run), `settings` (the
+///    resolved script settings), `signals` (participant-specific data —
+///    anything participant-specific is a signal) and top-level invocation
+///    values (`now`, `seed`, `trigger`).
+///    The `question_follow_up` kind (contract v2, never a bundle part; see
 ///    [ScriptKind.bundleParts]) has the group `question` (the branched
-///    question and its members), `signals`, `now` and `seed`.
-///    The `question_dynamic` kind (contract v1, never a bundle part) has the
+///    question and its members), `signals`, `now`, `zone` and `seed`.
+///    The `question_dynamic` kind (contract v2, never a bundle part) has the
 ///    groups `question` (the members with `dynamic`, the base `text` and the
 ///    base `options`), `step` (`index`, `question_ids`), `signals` (with
-///    `earlier_presentations`), `now` and `seed`.
+///    `earlier_presentations`), `now`, `zone` and `seed`.
 ///    Every kind takes a `seed`: required on `question_selection`,
 ///    `follow_up`, `question_follow_up` and `question_dynamic`, optional on
 ///    `scheduling`.
+///    Every timestamp of every contract is local epoch seconds in the zone
+///    of the run; the host converts with [LocalTimeCodec]. The `follow_up`
+///    output is `{trigger_at, tag}` or `{trigger_in_seconds, tag}`.
 library;
 
 export 'src/contracts/contracts.dart';

@@ -3,8 +3,9 @@ import 'package:test/test.dart';
 
 const _runtime = LuaScriptRuntime();
 
-// A valid question_follow_up input (contract version 1): the `question`
-// group, the `signals` group and the invocation values `now` and `seed`.
+// A valid question_follow_up input (contract version 2): the `question`
+// group, the `signals` group and the invocation values `now`, `zone` and
+// `seed`.
 Map<String, Object?> _input() => {
   'question': <String, Object?>{
     'id': 'bq1',
@@ -44,6 +45,7 @@ Map<String, Object?> _input() => {
     ],
   },
   'now': '2026-06-01T09:05:00.000Z',
+  'zone': 'Europe/Stockholm',
   'seed': 42,
 };
 
@@ -71,23 +73,23 @@ Matcher _inputInvalidAt(String path) => throwsA(
 
 void main() {
   group('question_follow_up descriptor', () {
-    test('has the entry point, contract version 1 and the field names', () {
+    test('has the entry point, contract version 2 and the field names', () {
       final d = contractFor(ScriptKind.questionFollowUp)!;
       expect(d.kind, ScriptKind.questionFollowUp);
       expect(d.entrypoint, 'follow_up_questions');
       expect(d.entrypoint, questionFollowUpEntrypoint);
-      expect(d.ioContractVersion, 1);
+      expect(d.ioContractVersion, 2);
       expect(d.ioContractVersion, questionFollowUpContractVersion);
       expect(identical(d, questionFollowUpContract), isTrue);
 
       final json = d.toJson();
       expect(json['kind'], 'question_follow_up');
       expect(json['entrypoint'], 'follow_up_questions');
-      expect(json['io_contract_version'], 1);
+      expect(json['io_contract_version'], 2);
       final inNames = ((json['input'] as Map)['fields'] as List)
           .map((f) => (f as Map)['name'])
           .toList();
-      expect(inNames, ['question', 'signals', 'now', 'seed']);
+      expect(inNames, ['question', 'signals', 'now', 'zone', 'seed']);
       final outFields = ((json['output'] as Map)['fields'] as List).cast<Map>();
       expect(outFields.map((f) => f['name']).toList(), ['questions', 'reason']);
       for (final f in outFields) {

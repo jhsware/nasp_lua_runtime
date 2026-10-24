@@ -17,6 +17,7 @@ import 'contracts/contracts.dart';
 import 'errors.dart';
 import 'host_helpers.dart';
 import 'marshal.dart';
+import 'output_rules.dart';
 import 'string_guards.dart';
 
 /// Per-invocation execution budget (§6.3). Budgets apply per part invocation.
@@ -271,12 +272,14 @@ class LuaScriptRuntime {
     }
     if (callError != null) return typed(ScriptErrorType.runtime, callError);
 
-    // 6. Read + validate the output (§4.4).
+    // 6. Read + validate the output (§4.4), then the rules the schema cannot
+    // express (output_rules.dart).
     final Map<String, Object?> output;
     try {
       output =
           readLuaValue(ls, contract.output.asType, '', kind)
               as Map<String, Object?>;
+      checkOutputRules(kind, output);
     } on ScriptError catch (e) {
       return err(e);
     }

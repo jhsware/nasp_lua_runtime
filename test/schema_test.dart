@@ -107,10 +107,10 @@ void main() {
     test('scheduling descriptor', () {
       final d = contractFor(ScriptKind.scheduling)!;
       expect(d.entrypoint, 'schedule');
-      expect(d.ioContractVersion, 2);
+      expect(d.ioContractVersion, 3);
       final json = d.toJson();
       expect(json['kind'], 'scheduling');
-      expect(json['io_contract_version'], 2);
+      expect(json['io_contract_version'], 3);
       expect((json['input'] as Map)['type'], 'object');
       expect((json['output'] as Map)['type'], 'object');
     });
@@ -118,17 +118,17 @@ void main() {
     test('question_selection descriptor', () {
       final d = contractFor(ScriptKind.questionSelection)!;
       expect(d.entrypoint, 'select_questions');
-      expect(d.ioContractVersion, 2);
+      expect(d.ioContractVersion, 3);
       expect(d.toJson()['kind'], 'question_selection');
     });
 
     test('follow_up descriptor', () {
       final d = contractFor(ScriptKind.followUp)!;
       expect(d.entrypoint, 'follow_up');
-      expect(d.ioContractVersion, 2);
+      expect(d.ioContractVersion, 3);
       final json = d.toJson();
       expect(json['kind'], 'follow_up');
-      expect(json['io_contract_version'], 2);
+      expect(json['io_contract_version'], 3);
       expect(ScriptKind.fromId('follow_up'), ScriptKind.followUp);
       // Output is an optional/nullable follow_up object — absent/null means
       // "no follow-up round".
@@ -136,8 +136,21 @@ void main() {
       final fu = outFields.firstWhere((f) => f['name'] == 'follow_up');
       expect(fu['required'], isFalse);
       expect(fu['nullable'], isTrue);
+      // The follow_up object: trigger_at or trigger_in_seconds, and the tag.
+      final fuFields = ((fu['type'] as Map)['fields'] as List).cast<Map>();
+      expect(fuFields.map((f) => f['name']), [
+        'trigger_at',
+        'trigger_in_seconds',
+        'tag',
+      ]);
+      final inSeconds = fuFields.firstWhere(
+        (f) => f['name'] == 'trigger_in_seconds',
+      );
+      expect((inSeconds['type'] as Map)['type'], 'int');
+      expect(inSeconds['required'], isFalse);
+      expect(inSeconds['nullable'], isTrue);
       // Distinguishing invariant: the follow_up input carries answer values
-      // (under the `signals` group in contract v2).
+      // (under the `signals` group).
       final inFields = ((json['input'] as Map)['fields'] as List).cast<Map>();
       final signals = inFields.firstWhere((f) => f['name'] == 'signals');
       final signalFields = ((signals['type'] as Map)['fields'] as List)
@@ -216,7 +229,7 @@ void main() {
 
     Map<String, Object?> validSched() => {
       'study': <String, Object?>{
-        'timezone': 'Europe/Stockholm',
+        'zone': 'Europe/Stockholm',
         'window': <String, Object?>{
           'start': '2026-01-01T00:00:00Z',
           'end': '2026-12-31T00:00:00Z',
@@ -346,7 +359,7 @@ void main() {
 
     Map<String, Object?> validSched() => {
       'study': <String, Object?>{
-        'timezone': 'Europe/Stockholm',
+        'zone': 'Europe/Stockholm',
         'window': <String, Object?>{
           'start': '2026-01-01T00:00:00Z',
           'end': '2026-12-31T00:00:00Z',
@@ -443,11 +456,11 @@ void main() {
       },
     );
 
-    test('the additive field leaves the contract version at 2', () {
-      expect(contractFor(ScriptKind.scheduling)!.ioContractVersion, 2);
+    test('the contract version is 3 (the additive seed did not bump it)', () {
+      expect(contractFor(ScriptKind.scheduling)!.ioContractVersion, 3);
       expect(
         contractFor(ScriptKind.scheduling)!.toJson()['io_contract_version'],
-        2,
+        3,
       );
     });
   });

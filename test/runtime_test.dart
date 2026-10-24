@@ -3,13 +3,15 @@ import 'package:test/test.dart';
 
 const _runtime = LuaScriptRuntime();
 
-// Fixtures follow contract v2: `study` (study variables), `settings` (the
-// resolved script settings), `signals` (participant-specific data) and the
-// top-level invocation values (`now`, `seed`, `trigger`).
+// Fixtures follow contract v3: `study` (study variables, with the `zone` of
+// the run), `settings` (the resolved script settings), `signals`
+// (participant-specific data) and the top-level invocation values (`now`,
+// `seed`, `trigger`). The timestamps are local epoch seconds in the zone of
+// the run; the runtime itself does not convert them.
 
 Map<String, Object?> _schedulingInput({int horizon = 3}) => {
   'study': <String, Object?>{
-    'timezone': 'Europe/Stockholm',
+    'zone': 'Europe/Stockholm',
     'window': <String, Object?>{
       'start': '2026-01-01T00:00:00Z',
       'end': '2026-12-31T00:00:00Z',
@@ -35,6 +37,7 @@ Map<String, Object?> _schedulingInput({int horizon = 3}) => {
 
 Map<String, Object?> _qsInput() => {
   'study': <String, Object?>{
+    'zone': 'Europe/Stockholm',
     'question_sets': [
       {'id': 'set1', 'name': 'Daily', 'state': 'published'},
     ],
@@ -64,6 +67,7 @@ Map<String, Object?> _qsInput() => {
 };
 
 Map<String, Object?> _followUpInput() => {
+  'study': <String, Object?>{'zone': 'Europe/Stockholm'},
   'signals': <String, Object?>{
     'participant_id': 'p1',
     'current_round': <String, Object?>{
@@ -438,14 +442,14 @@ end
 
     test('inputInvalid before Lua runs', () {
       final bad = _schedulingInput();
-      _group(bad, 'study').remove('timezone');
+      _group(bad, 'study').remove('zone');
       final r = _runtime.run(
         ScriptKind.scheduling,
         'function schedule() end',
         bad,
       );
       expect(r.error!.type, ScriptErrorType.inputInvalid);
-      expect(r.error!.path, 'study.timezone');
+      expect(r.error!.path, 'study.zone');
     });
 
     test('outputInvalid for a wrong-shaped return', () {
@@ -608,7 +612,7 @@ end
       );
     });
 
-    test('a follow_up missing trigger_at is outputInvalid', () {
+    test('a follow_up with neither trigger field is outputInvalid', () {
       const src = r'''
 function follow_up(input)
   return { follow_up = { tag = "x" } }
@@ -617,7 +621,11 @@ end
       final r = _runtime.run(ScriptKind.followUp, src, _followUpInput());
       expect(r.ok, isFalse);
       expect(r.error!.type, ScriptErrorType.outputInvalid);
-      expect(r.error!.path, 'follow_up.trigger_at');
+      expect(r.error!.path, 'follow_up');
+      expect(
+        r.error!.message,
+        'exactly one of trigger_at and trigger_in_seconds',
+      );
     });
 
     test('input missing signals.current_round is inputInvalid', () {
@@ -650,7 +658,7 @@ end
     });
   });
 
-  group('contract v2', () {
+  group('contract v3', () {
     const expectedInputFields = <ScriptKind, List<String>>{
       ScriptKind.scheduling: ['study', 'settings', 'signals', 'now', 'seed'],
       ScriptKind.questionSelection: [
@@ -660,23 +668,31 @@ end
         'trigger',
         'seed',
       ],
-      ScriptKind.followUp: ['settings', 'signals', 'now', 'seed'],
+      ScriptKind.followUp: ['study', 'settings', 'signals', 'now', 'seed'],
     };
 
-    // question_follow_up is not a bundle part and has its own contract
-    // version 1 (test/question_follow_up_contract_test.dart).
+    // question_follow_up and question_dynamic are not bundle parts and have
+    // their own contract version 2 (their contract tests).
     test(
-      'every bundle kind is io_contract_version 2 with the grouped input',
+      'every bundle kind is io_contract_version 3 with the grouped input',
       () {
         for (final kind in ScriptKind.bundleParts) {
           final d = contractFor(kind)!;
-          expect(d.ioContractVersion, 2, reason: kind.id);
+          expect(d.ioContractVersion, 3, reason: kind.id);
           final json = d.toJson();
-          expect(json['io_contract_version'], 2, reason: kind.id);
+          expect(json['io_contract_version'], 3, reason: kind.id);
           final names = ((json['input'] as Map)['fields'] as List)
               .map((f) => (f as Map)['name'])
               .toList();
           expect(names, expectedInputFields[kind], reason: kind.id);
+          final study = ((json['input'] as Map)['fields'] as List)
+              .cast<Map>()
+              .firstWhere((f) => f['name'] == 'study');
+          final studyFields = ((study['type'] as Map)['fields'] as List)
+              .map((f) => (f as Map)['name'])
+              .toList();
+          expect(studyFields.first, 'zone', reason: kind.id);
+          expect(studyFields, isNot(contains('timezone')), reason: kind.id);
         }
       },
     );
@@ -703,7 +719,7 @@ end
       expect(r.error!.path, 'study');
     });
 
-    test('a v1-shaped follow_up input is inputInvalid at `signals`', () {
+    test('a v1-shaped follow_up input is inputInvalid at `study`', () {
       final r = _runtime.run(
         ScriptKind.followUp,
         'function follow_up(input) return {} end',
@@ -711,8 +727,37 @@ end
       );
       expect(r.ok, isFalse);
       expect(r.error!.type, ScriptErrorType.inputInvalid);
-      expect(r.error!.path, 'signals');
+      expect(r.error!.path, 'study');
     });
+
+    test('a v2 scheduling input (study.timezone) is inputInvalid', () {
+      final v2 = _schedulingInput();
+      final study = _group(v2, 'study');
+      study['timezone'] = study.remove('zone');
+      final r = _runtime.run(
+        ScriptKind.scheduling,
+        'function schedule(input) return { triggers = {} } end',
+        v2,
+      );
+      expect(r.ok, isFalse);
+      expect(r.error!.type, ScriptErrorType.inputInvalid);
+      expect(r.error!.path, startsWith('study.'));
+    });
+
+    test(
+      'a v2 follow_up input (no study group) is inputInvalid at `study`',
+      () {
+        final v2 = _followUpInput()..remove('study');
+        final r = _runtime.run(
+          ScriptKind.followUp,
+          'function follow_up(input) return {} end',
+          v2,
+        );
+        expect(r.ok, isFalse);
+        expect(r.error!.type, ScriptErrorType.inputInvalid);
+        expect(r.error!.path, 'study');
+      },
+    );
 
     test(
       'a missing group is rejected before Lua runs, never as a nil error',

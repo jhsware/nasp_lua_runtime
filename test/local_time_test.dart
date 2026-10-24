@@ -236,4 +236,122 @@ void main() {
       expect(t.toUtc(), DateTime.utc(2026, 10, 25, 1, 30));
     });
   });
+
+  // The host round trip of docs/design/time-model.md §5: the host converts
+  // the inputs with toLocal, runs the script, and converts the outputs with
+  // toInstant (or adds a duration to the instant of now).
+  group('end to end across 2026-10-25 in Europe/Stockholm', () {
+    const runtime = LuaScriptRuntime();
+    String iso(DateTime local) => local.toIso8601String();
+
+    test('at_clock(add_days(now, i), "07:00") keeps 07:00 on the clock', () {
+      const source = '''
+function schedule(input)
+  local triggers = {}
+  for i = 0, 6 do
+    triggers[#triggers + 1] = {
+      trigger_at = at_clock(add_days(input.now, i), "07:00"),
+    }
+  end
+  return { triggers = triggers }
+end
+''';
+      final realNow = DateTime.utc(2026, 10, 22, 5);
+      final localNow = LocalTimeCodec.toLocal(realNow, stockholm);
+      expect(localNow, DateTime.utc(2026, 10, 22, 7));
+      final input = <String, Object?>{
+        'study': <String, Object?>{
+          'zone': stockholm,
+          'window': <String, Object?>{
+            'start': iso(DateTime.utc(2026, 10, 1)),
+            'end': iso(DateTime.utc(2026, 12, 1)),
+          },
+          'horizon_days': 7,
+        },
+        'settings': <String, Object?>{
+          'id': 's1',
+          'scope': 'study',
+          'version': 1,
+          'state': 'published',
+          'rule': <String, Object?>{},
+        },
+        'signals': <String, Object?>{
+          'participant_id': 'p1',
+          'enrolment_date': iso(DateTime.utc(2026, 10, 1)),
+        },
+        'now': iso(localNow),
+      };
+      final r = runtime.run(
+        ScriptKind.scheduling,
+        source,
+        input,
+        now: localNow,
+      );
+      expect(r.ok, isTrue, reason: '${r.error}');
+      final instants = (r.output!['triggers'] as List)
+          .map(
+            (t) => LocalTimeCodec.toInstant(
+              (t as Map)['trigger_at'] as DateTime,
+              stockholm,
+            ),
+          )
+          .toList();
+      expect(instants, [
+        DateTime.utc(2026, 10, 22, 5),
+        DateTime.utc(2026, 10, 23, 5),
+        DateTime.utc(2026, 10, 24, 5),
+        DateTime.utc(2026, 10, 25, 6),
+        DateTime.utc(2026, 10, 26, 6),
+        DateTime.utc(2026, 10, 27, 6),
+        DateTime.utc(2026, 10, 28, 6),
+      ]);
+      // Each one is 07:00 on the clock.
+      for (final instant in instants) {
+        expect(LocalTimeCodec.toLocal(instant, stockholm).hour, 7);
+      }
+    });
+
+    test('trigger_in_seconds = 1800 at 02:45 local is now + 30 min', () {
+      const source = '''
+function follow_up(input)
+  return { follow_up = { trigger_in_seconds = 1800, tag = "x" } }
+end
+''';
+      // The first 02:45 of 2026-10-25 (+02:00) is 00:45Z.
+      final realNow = DateTime.utc(2026, 10, 25, 0, 45);
+      final localNow = LocalTimeCodec.toLocal(realNow, stockholm);
+      expect(localNow, DateTime.utc(2026, 10, 25, 2, 45));
+      final round = <String, Object?>{
+        'scheduled_at': iso(DateTime.utc(2026, 10, 25, 2, 30)),
+        'answered_at': iso(localNow),
+        'delta_seconds': 900,
+        'type': 'beep',
+        'answers': <Object?>[],
+      };
+      final input = <String, Object?>{
+        'study': <String, Object?>{'zone': stockholm},
+        'signals': <String, Object?>{
+          'participant_id': 'p1',
+          'current_round': round,
+          'recent_rounds': <Object?>[],
+          'schedule': <Object?>[],
+        },
+        'now': iso(localNow),
+        'seed': 1,
+      };
+      final r = runtime.run(ScriptKind.followUp, source, input, now: localNow);
+      expect(r.ok, isTrue, reason: '${r.error}');
+      final seconds = (r.output!['follow_up'] as Map)['trigger_in_seconds'];
+      // The host adds the duration to the instant of now.
+      final at = realNow.add(Duration(seconds: seconds as int));
+      expect(at, DateTime.utc(2026, 10, 25, 1, 15));
+      expect(at.difference(realNow), const Duration(minutes: 30));
+      // As a clock time the same arithmetic would be 03:15 local, which is
+      // 02:15Z: 90 minutes later on the time line.
+      expect(
+        LocalTimeCodec.toInstant(DateTime.utc(2026, 10, 25, 3, 15), stockholm),
+        DateTime.utc(2026, 10, 25, 2, 15),
+      );
+    });
+  });
 }

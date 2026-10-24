@@ -280,5 +280,6 @@ const Map<String, Object?> _input = {
     'earlier_presentations': <Object?>[],
   },
   'now': '2026-03-05T09:00:00.000Z',
+  'zone': 'Europe/Stockholm',
   'seed': 1,
 };
