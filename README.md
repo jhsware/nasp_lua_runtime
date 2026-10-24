@@ -6,6 +6,12 @@ component that must be **byte-identical** in every host that executes scripts
 `nasp_waves_server/docs/design/scripting.md` (authoritative spec) and
 `docs/architecture/scripting-module.md` §5.
 
+Design documents of this package are in `docs/design/`:
+[time-model.md](docs/design/time-model.md) — local time in the scripts
+(contract v3, planned for 0.13.0): the `LocalTimeCodec`, the four host
+helpers and the DST rules. The authority is
+`nasp_waves_server/docs/design/time-model.md`.
+
 ## What it provides
 
 - `LuaScriptRuntime` — the sandboxed, deterministic execution engine over
