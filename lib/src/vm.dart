@@ -100,7 +100,7 @@ class LuaScriptRuntime {
   /// bundle's `runtime_min_version` against this constant to decide whether it
   /// can execute the bundle. `test/version_test.dart` guards the two against
   /// drift.
-  static const String version = '0.12.0';
+  static const String version = '0.13.0';
 
   /// Execute one [kind] part.
   ///

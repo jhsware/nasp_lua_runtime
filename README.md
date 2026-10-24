@@ -8,9 +8,8 @@ component that must be **byte-identical** in every host that executes scripts
 
 Design documents of this package are in `docs/design/`:
 [time-model.md](docs/design/time-model.md) — local time in the scripts
-(contract v3, planned for 0.13.0): the `LocalTimeCodec`, the four host
-helpers and the DST rules. The authority is
-`nasp_waves_server/docs/design/time-model.md`.
+(contract v3, 0.13.0): the `LocalTimeCodec`, the four host helpers and the
+DST rules. The authority is `nasp_waves_server/docs/design/time-model.md`.
 
 ## What it provides
 
@@ -21,12 +20,20 @@ helpers and the DST rules. The authority is
   the `ScriptError` taxonomy. `compile(kind, source)` is the static check.
 - Per-kind **I/O contracts**: the bundle kinds (`scheduling`,
   `question_selection`, `follow_up`, listed in `ScriptKind.bundleParts`) with
-  `io_contract_version = 2`, and the two kinds of a branched question, never
+  `io_contract_version = 3`, and the two kinds of a branched question, never
   a bundle part: `question_follow_up` (the branching script) and
   `question_dynamic` (the dynamic questions script), each with
-  `io_contract_version = 1`.
+  `io_contract_version = 2`.
   Each is serialisable as the contract descriptor served by
-  `GET /script-bundles/contracts?kind=`.
+  `GET /script-bundles/contracts?kind=`. Every timestamp of every contract is
+  local epoch seconds in the zone of the run (see
+  [Local-time helpers](#local-time-helpers)).
+- `LocalTimeCodec` — the conversion between an instant and the local
+  wall-clock time in an IANA zone: `toLocal`, `toInstant` (a gap moves
+  forward to the transition, an overlap takes the earlier instant) and
+  `isValidZone`. Both hosts call it before and after each run.
+- The four **local-time helpers** of the sandbox: `local_time`, `at_clock`,
+  `add_days`, `add_seconds`.
 - The explicit **schema type + validator** (path-qualified errors) and total,
   lossless **Dart↔Lua marshalling** (timestamps ↔ epoch seconds, int/double
   preserved). `Field` carries three advisory slots for bundle-declared
@@ -36,6 +43,19 @@ helpers and the DST rules. The authority is
   `string` field — `time` for `HH:mm`, `date` for `yyyy-MM-dd` — read by
   client forms). `Field` also carries `participant_editable` (see
   [Participant-editable settings](#participant-editable-settings)).
+
+## The tz database
+
+`LocalTimeCodec` uses `package:timezone` (`^0.11.0`, pure Dart) with the full
+database `data/latest_all.dart`: every canonical zone and every link name
+(for example `Europe/Kiev` and `US/Eastern`, which a phone can report), with
+the full history. The embedded tz data is about 430 KB (`latest_all.tzf`
+441,320 bytes in timezone 0.11.2; `latest_10y.tzf` is 66,768 bytes but has
+only the canonical zones for a window of years around the data release). The
+codec loads it on its first call into the global database of
+`package:timezone`; a host must not later load a smaller variant. The tz data
+rides on the tag of this package, so two hosts that pin the same tag convert
+identically. A new tz release comes with a new runtime tag.
 
 ## Participant-editable settings
 
@@ -102,55 +122,63 @@ Rules:
   `rule.quiet_hours.end: must be <= 23:30`). It does not require
   `start <= end`.
 
-## Contract v2: grouped inputs
+## Contract v3: grouped inputs in local time
 
 Every script input is grouped by provenance, so the structure itself tells a
 script author where a value comes from:
 
 | group | contents | example paths |
 | --- | --- | --- |
-| `input.study` | Study variables — the same for every participant of the study. | `study.timezone`, `study.window.start`, `study.horizon_days`, `study.length_days`, `study.question_sets`, `study.questions` |
+| `input.study` | Study variables — the same for every participant of the study. `study.zone` is the IANA zone of the run. | `study.zone`, `study.window.start`, `study.horizon_days`, `study.length_days`, `study.question_sets`, `study.questions` |
 | `input.question` | `question_follow_up` and `question_dynamic` only. The branched question and its members — the same for every participant. | `question.id`, `question.root_question_id`, `question.questions` |
 | `input.step` | `question_dynamic` only. The step of the presentation that the host runs now. | `step.index`, `step.question_ids` |
 | `input.settings` | The resolved script settings. A participant-scope override wins over the study scope; `settings.rule` carries the script-specific keys. | `settings.rule` |
 | `input.signals` | Participant-specific data the script analyses. **Anything participant-specific is a signal.** Device telemetry (location, usage) will be added here later, additively. | `signals.participant_id`, `signals.enrolment_date`, `signals.answers`, `signals.current_round`, `signals.recent_rounds`, `signals.schedule` |
-| top-level | Invocation values from the host. | `now`, `seed`, `trigger` |
+| top-level | Invocation values from the host. | `now`, `seed`, `trigger`, `zone` (branch kinds) |
+
+Every timestamp, in the input and in the output, is **local epoch seconds**
+in the zone of the run (see [Local-time helpers](#local-time-helpers)).
+Durations (`delta_seconds`, `trigger_in_seconds`, the 24 h of
+`recent_rounds`) are on the time line.
 
 Per kind:
 
-- `scheduling` — `schedule(input)`: `study {timezone, window, horizon_days,
-  length_days?}`, `settings`, `signals {participant_id, enrolment_date}`,
-  `now`, `seed?`. The seed is optional here (0.9.0); it is required on the
-  other kinds. A host that sends none leaves `random()` seeded with 0.
-- `question_selection` — `select_questions(input)`: `study {question_sets,
-  questions}`, `settings?`, `signals {participant_id, answers}`, `trigger`,
-  `seed`.
-- `follow_up` — `follow_up(input)`: `settings?`, `signals {participant_id,
-  current_round, recent_rounds, schedule}`, `now`, `seed`. No `study` group
-  yet (adding one later is additive).
-- `question_follow_up` — `follow_up_questions(input)` (0.10.0, contract
-  version 1): `question {id, root_question_id, questions}`, `signals
-  {participant_id, answers}`, `now`, `seed`. The script of a branched
-  question. It is not a bundle part (see `ScriptKind.bundleParts`). The
-  `question` group holds the branched question and its members; it is the
-  same for each participant. Each answer carries its `values`. The output is
-  `questions` (a list of `{id}`) and `reason`, both optional.
-- `question_dynamic` — `dynamic_questions(input)` (0.11.0, contract
-  version 1): `question {id, root_question_id, questions}` (each member also
+- `scheduling` — `schedule(input)` (contract 3): `study {zone, window,
+  horizon_days, length_days?}`, `settings`, `signals {participant_id,
+  enrolment_date}`, `now`, `seed?`. The seed is optional here (0.9.0); it is
+  required on the other kinds. A host that sends none leaves `random()`
+  seeded with 0. Output `triggers[] {trigger_at, tag?}`, `regenerate_after?`.
+- `question_selection` — `select_questions(input)` (contract 3): `study
+  {zone, question_sets, questions}`, `settings?`, `signals {participant_id,
+  answers}`, `trigger`, `seed`.
+- `follow_up` — `follow_up(input)` (contract 3): `study {zone}`, `settings?`,
+  `signals {participant_id, current_round, recent_rounds, schedule}`, `now`,
+  `seed`. Output `follow_up?`: `{trigger_at, tag}` (a clock time) or
+  `{trigger_in_seconds, tag}` (a duration from `now`, an int >= 1). A
+  non-null `follow_up` with both or with neither is `outputInvalid` at
+  `follow_up`: `exactly one of trigger_at and trigger_in_seconds`.
+- `question_follow_up` — `follow_up_questions(input)` (0.10.0; contract 2
+  since 0.13.0): `question {id, root_question_id, questions}`, `signals
+  {participant_id, answers}`, `now`, `zone`, `seed`. The script of a
+  branched question. It is not a bundle part (see `ScriptKind.bundleParts`).
+  The `question` group holds the branched question and its members; it is
+  the same for each participant. Each answer carries its `values`. The output
+  is `questions` (a list of `{id}`) and `reason`, both optional.
+- `question_dynamic` — `dynamic_questions(input)` (0.11.0; contract 2 since
+  0.13.0): `question {id, root_question_id, questions}` (each member also
   has `dynamic`, the base `text` and the base `options` `{label, value,
   position}`), `step {index, question_ids}`, `signals {participant_id,
   answers, earlier_presentations}` (each earlier presentation has
-  `schedule_entry_id`, `answered_at` and `answers`), `now`, `seed`. The
-  dynamic questions script of a branched question. It is not a bundle part.
-  The output is `questions` (a list of `{id, text?, options?, key?}`; an
-  option is `{label, value}` with no position) and `reason`, both optional.
-  The output has no `type` or `type_config` field: the validator drops an
-  undeclared key.
+  `schedule_entry_id`, `answered_at` and `answers`), `now`, `zone`, `seed`.
+  The dynamic questions script of a branched question. It is not a bundle
+  part. The output is `questions` (a list of `{id, text?, options?, key?}`;
+  an option is `{label, value}` with no position) and `reason`, both
+  optional. The output has no `type` or `type_config` field: the validator
+  drops an undeclared key.
 
-The outputs of the bundle kinds are unchanged from their v1. A v1-shaped
-(flat) bundle input is rejected with a path-qualified `inputInvalid` error at
-the first missing group. The prose documentation of every field lives in the
-server's input reference, not in this package.
+A v1-shaped (flat) bundle input, or a v2 input without `zone`, is rejected
+with a path-qualified `inputInvalid` error. The prose documentation of every
+field lives in the server's input reference, not in this package.
 
 ## Sandbox guarantees
 
@@ -222,8 +250,13 @@ dependencies:
   nasp_lua_runtime:
     git:
       url: <this repository>
-      ref: v0.12.0
+      ref: v0.13.0
 ```
+
+A host that moves to 0.13.0 must convert every timestamp with
+`LocalTimeCodec` and fill the `zone` of the run (see the `## 0.13.0` entry
+of `CHANGELOG.md`). The server and the phone pin the same tag, so they use
+the same tz data.
 
 The conformance test suite (`dart test`) is the acceptance gate for any future
 engine swap: same fixtures, same inputs, identical outputs.
