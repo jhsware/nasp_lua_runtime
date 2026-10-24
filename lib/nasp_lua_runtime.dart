@@ -8,12 +8,19 @@
 ///
 /// Public surface:
 ///  - [LuaScriptRuntime] — the sandboxed, deterministic execution engine.
-///    The sandbox has base + `math` + `string` + `table` and the host
-///    functions `now`, `random`, `log`. The engine does not support the Lua
-///    patterns: a string function that would use one (`find`/`match` with a
-///    pattern and not plain, `gmatch`, `gsub` with a pattern, a function, a
-///    table or `%` in the replacement, `reverse`) raises a clear error
+///    The sandbox has base + `math` + `string` + `table`, the host
+///    functions `now`, `random`, `log`, and the local-time helpers
+///    `local_time`, `at_clock`, `add_days`, `add_seconds` (pure functions on
+///    local epoch seconds; each counts as a host call). The engine does not
+///    support the Lua patterns: a string function that would use one
+///    (`find`/`match` with a pattern and not plain, `gmatch`, `gsub` with a
+///    pattern, a function, a table or `%` in the replacement, `reverse`)
+///    raises a clear error
 ///    (`string.<name>: Lua patterns are not supported; use <hint>`).
+///  - [LocalTimeCodec] — the conversion between an instant and the local
+///    wall-clock time in an IANA zone (the tz database of
+///    `package:timezone`), with the gap and overlap rules. Both hosts use it
+///    before and after a run (docs/design/time-model.md).
 ///  - [ScriptError] / [ScriptErrorType] / [ScriptKind] — the cross-host error
 ///    taxonomy (§6.4).
 ///  - The schema types ([Schema], [TypeSpec], [Field], [Constraint]) and the

@@ -155,11 +155,36 @@ server's input reference, not in this package.
 ## Sandbox guarantees
 
 Scripts see only base + `math`/`string`/`table` plus host-injected `now()`,
-seeded `random()`, and `log()` (captured to the trace). No `io`, `os`,
-`require`, `package`, `dofile`, `loadfile`, `load`, `debug`, or `print`.
-Budgets (host-call count, wall-clock, trace cap, output size) are enforced per
-invocation. Note: a hard instruction-count budget for pure CPU loops is
-deferred — the engine exposes only a line/breakpoint hook.
+seeded `random()`, `log()` (captured to the trace) and the four local-time
+helpers (below). No `io`, `os`, `require`, `package`, `dofile`, `loadfile`,
+`load`, `debug`, or `print`. Budgets (host-call count, wall-clock, trace cap,
+output size) are enforced per invocation. Note: a hard instruction-count
+budget for pure CPU loops is deferred — the engine exposes only a
+line/breakpoint hook.
+
+## Local-time helpers
+
+Since 0.13.0 every timestamp a script sees is **local epoch seconds** in the
+zone of the run: the epoch seconds of the wall-clock time read as if it were
+UTC (`2026-10-25 07:00` is `1792911600` in any zone). Four pure helpers work
+on these integers (`lib/src/host_helpers.dart`); the tz database is not
+involved:
+
+| helper | returns |
+| --- | --- |
+| `local_time(ts)` | the table `{year, month, day, hour, minute, second, weekday, yday}`; `weekday` is 1 = Monday to 7 = Sunday, `yday` is 1 to 366 |
+| `at_clock(ts, "HH:mm")` | the local epoch second of that clock time on the day of `ts` |
+| `add_days(ts, n)` | `ts + n * 86400`: the same clock time `n` days later; `n` may be negative |
+| `add_seconds(ts, n)` | `ts + n` |
+
+Each helper counts as a host call. They exist in `run` and in `compile`.
+An argument that is not an integer raises `<helper>: argument <i> (<name>)
+must be an integer` (a float with no fraction, such as the result of `/`,
+counts as an integer); a value outside the range of a date raises
+`<helper>: argument <i> (<name>) is out of range`; a clock string that is not
+two digits, a colon and two digits (00–23, 00–59) raises `at_clock: expected
+"HH:mm"`. As with the string guards, the engine adds no line number; the
+helper name locates the call. The tests are in `test/host_helpers_test.dart`.
 
 ## String functions
 
