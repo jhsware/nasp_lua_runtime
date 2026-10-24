@@ -80,8 +80,10 @@ Object? readLuaValue(LuaState ls, TypeSpec spec, String path, ScriptKind part) {
         _fail(part, path, 'expected timestamp (epoch seconds)');
       }
       final secs = ls.toNumber(-1);
-      return DateTime.fromMillisecondsSinceEpoch((secs * 1000).round(),
-          isUtc: true);
+      return DateTime.fromMillisecondsSinceEpoch(
+        (secs * 1000).round(),
+        isUtc: true,
+      );
     case SchemaType.list:
       if (!ls.isTable(-1)) _fail(part, path, 'expected list');
       final n = ls.rawLen(-1);
@@ -104,21 +106,28 @@ Object? readLuaValue(LuaState ls, TypeSpec spec, String path, ScriptKind part) {
 }
 
 Map<String, Object?> _readMap(
-    LuaState ls, TypeSpec value, String path, ScriptKind part) {
+  LuaState ls,
+  TypeSpec value,
+  String path,
+  ScriptKind part,
+) {
   final out = <String, Object?>{};
   final t = ls.getTop();
   ls.pushNil();
   while (ls.next(t)) {
     final key = ls.toStr(-2) ?? '';
-    out[key] =
-        readLuaValue(ls, value, path.isEmpty ? key : '$path.$key', part);
+    out[key] = readLuaValue(ls, value, path.isEmpty ? key : '$path.$key', part);
     ls.pop(1); // pop value, keep key for the next iteration
   }
   return out;
 }
 
 Map<String, Object?> _readObject(
-    LuaState ls, List<Field> fields, String path, ScriptKind part) {
+  LuaState ls,
+  List<Field> fields,
+  String path,
+  ScriptKind part,
+) {
   final out = <String, Object?>{};
   for (final field in fields) {
     final fpath = path.isEmpty ? field.name : '$path.${field.name}';
@@ -183,7 +192,8 @@ void _constrain(ScriptKind part, Constraint? c, Object? value, String path) {
     if (max != null && value > max) _fail(part, path, 'must be <= $max');
   }
   if (c.nonEmpty) {
-    if (value is String && value.isEmpty) _fail(part, path, 'must be non-empty');
+    if (value is String && value.isEmpty)
+      _fail(part, path, 'must be non-empty');
     if (value is List && value.isEmpty) _fail(part, path, 'must be non-empty');
   }
 }

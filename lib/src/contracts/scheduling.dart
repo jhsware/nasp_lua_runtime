@@ -45,16 +45,15 @@ const String schedulingEntrypoint = 'schedule';
 /// `question_selection` and `follow_up`, where the server hosts supply it so
 /// selection and follow-up decisions can read `settings.rule` too.
 TypeSpec resolvedSettingsSpec() => TypeSpec.object([
-      Field('id', TypeSpec.string()),
-      Field('scope', TypeSpec.string()),
-      Field('study_id', TypeSpec.string(), required: false, nullable: true),
-      Field('participant_id', TypeSpec.string(),
-          required: false, nullable: true),
-      Field('version', TypeSpec.integer()),
-      Field('state', TypeSpec.string()),
-      // The resolved rule is free-form JSON owned by nasp_scheduling.
-      Field('rule', TypeSpec.json()),
-    ]);
+  Field('id', TypeSpec.string()),
+  Field('scope', TypeSpec.string()),
+  Field('study_id', TypeSpec.string(), required: false, nullable: true),
+  Field('participant_id', TypeSpec.string(), required: false, nullable: true),
+  Field('version', TypeSpec.integer()),
+  Field('state', TypeSpec.string()),
+  // The resolved rule is free-form JSON owned by nasp_scheduling.
+  Field('rule', TypeSpec.json()),
+]);
 
 /// The frozen `scheduling` contract descriptor.
 final ContractDescriptor schedulingContract = ContractDescriptor(
@@ -63,30 +62,53 @@ final ContractDescriptor schedulingContract = ContractDescriptor(
   ioContractVersion: schedulingContractVersion,
   input: Schema([
     // Study variables — the same for every participant of the study.
-    Field('study', TypeSpec.object([
-      Field('timezone', TypeSpec.string(),
-          constraint: const Constraint(nonEmpty: true)),
-      Field('window', TypeSpec.object([
-        Field('start', TypeSpec.timestamp()),
-        Field('end', TypeSpec.timestamp()),
-      ])),
-      Field('horizon_days', TypeSpec.integer(),
-          constraint: const Constraint(min: 1)),
-      // Optional participant-relative study length. Effective study end =
-      // signals.enrolment_date + study.length_days, clamped to
-      // study.window.end; when omitted the effective end is study.window.end.
-      Field('length_days', TypeSpec.integer(),
-          required: false, nullable: true, constraint: const Constraint(min: 1)),
-    ])),
+    Field(
+      'study',
+      TypeSpec.object([
+        Field(
+          'timezone',
+          TypeSpec.string(),
+          constraint: const Constraint(nonEmpty: true),
+        ),
+        Field(
+          'window',
+          TypeSpec.object([
+            Field('start', TypeSpec.timestamp()),
+            Field('end', TypeSpec.timestamp()),
+          ]),
+        ),
+        Field(
+          'horizon_days',
+          TypeSpec.integer(),
+          constraint: const Constraint(min: 1),
+        ),
+        // Optional participant-relative study length. Effective study end =
+        // signals.enrolment_date + study.length_days, clamped to
+        // study.window.end; when omitted the effective end is study.window.end.
+        Field(
+          'length_days',
+          TypeSpec.integer(),
+          required: false,
+          nullable: true,
+          constraint: const Constraint(min: 1),
+        ),
+      ]),
+    ),
     // The resolved script settings (participant-scope override wins over
     // study scope).
     Field('settings', resolvedSettingsSpec()),
     // Participant-specific data the script analyses.
-    Field('signals', TypeSpec.object([
-      Field('participant_id', TypeSpec.string(),
-          constraint: const Constraint(nonEmpty: true)),
-      Field('enrolment_date', TypeSpec.timestamp()),
-    ])),
+    Field(
+      'signals',
+      TypeSpec.object([
+        Field(
+          'participant_id',
+          TypeSpec.string(),
+          constraint: const Constraint(nonEmpty: true),
+        ),
+        Field('enrolment_date', TypeSpec.timestamp()),
+      ]),
+    ),
     // Invocation values from the host: the current wall-clock instant.
     Field('now', TypeSpec.timestamp()),
     // Optional host seed for random(); the host also seeds the sandbox with it.
@@ -95,12 +117,18 @@ final ContractDescriptor schedulingContract = ContractDescriptor(
   output: Schema([
     Field(
       'triggers',
-      TypeSpec.list(TypeSpec.object([
-        Field('trigger_at', TypeSpec.timestamp()),
-        Field('tag', TypeSpec.string(), required: false, nullable: true),
-      ])),
+      TypeSpec.list(
+        TypeSpec.object([
+          Field('trigger_at', TypeSpec.timestamp()),
+          Field('tag', TypeSpec.string(), required: false, nullable: true),
+        ]),
+      ),
     ),
-    Field('regenerate_after', TypeSpec.timestamp(),
-        required: false, nullable: true),
+    Field(
+      'regenerate_after',
+      TypeSpec.timestamp(),
+      required: false,
+      nullable: true,
+    ),
   ]),
 );

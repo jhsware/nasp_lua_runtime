@@ -45,7 +45,8 @@ bool isLuaPattern(String text) {
 
 /// The Lua prelude that installs the guards. It must use no pattern itself:
 /// the only `find` it calls is a plain find for the `%` character.
-const String stringGuardPrelude = '''
+const String stringGuardPrelude =
+    '''
 local string = string
 local is_pattern = $_predicateName
 local find, match, gsub = string.find, string.match, string.gsub
@@ -112,7 +113,8 @@ void installStringGuards(LuaState ls) {
     }
     if (loaded != ThreadStatus.luaOk) {
       throw StateError(
-          'string guard prelude does not compile: ${ls.toStr(-1)}');
+        'string guard prelude does not compile: ${ls.toStr(-1)}',
+      );
     }
     final ThreadStatus ran;
     try {

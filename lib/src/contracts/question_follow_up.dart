@@ -54,30 +54,49 @@ final ContractDescriptor questionFollowUpContract = ContractDescriptor(
   input: Schema([
     // The branched question at the version that the participant gets. It is
     // the same for each participant.
-    Field('question', TypeSpec.object([
-      Field('id', TypeSpec.string()),
-      Field('root_question_id', TypeSpec.string()),
-      // All members at that version, ordered by position.
-      Field('questions', TypeSpec.list(TypeSpec.object([
+    Field(
+      'question',
+      TypeSpec.object([
         Field('id', TypeSpec.string()),
-        Field('role', TypeSpec.enumeration(_memberRoles)),
-        Field('type', TypeSpec.string()),
-        Field('tags', TypeSpec.list(TypeSpec.string())),
-        Field('position', TypeSpec.integer()),
-      ]))),
-    ])),
+        Field('root_question_id', TypeSpec.string()),
+        // All members at that version, ordered by position.
+        Field(
+          'questions',
+          TypeSpec.list(
+            TypeSpec.object([
+              Field('id', TypeSpec.string()),
+              Field('role', TypeSpec.enumeration(_memberRoles)),
+              Field('type', TypeSpec.string()),
+              Field('tags', TypeSpec.list(TypeSpec.string())),
+              Field('position', TypeSpec.integer()),
+            ]),
+          ),
+        ),
+      ]),
+    ),
     // Data about this participant.
-    Field('signals', TypeSpec.object([
-      Field('participant_id', TypeSpec.string(),
-          constraint: const Constraint(nonEmpty: true)),
-      // The answers of this presentation, in answer order. The values list is
-      // empty when the participant skipped the question.
-      Field('answers', TypeSpec.list(TypeSpec.object([
-        Field('question_id', TypeSpec.string()),
-        Field('values', TypeSpec.list(TypeSpec.string())),
-        Field('answered_at', TypeSpec.timestamp()),
-      ]))),
-    ])),
+    Field(
+      'signals',
+      TypeSpec.object([
+        Field(
+          'participant_id',
+          TypeSpec.string(),
+          constraint: const Constraint(nonEmpty: true),
+        ),
+        // The answers of this presentation, in answer order. The values list is
+        // empty when the participant skipped the question.
+        Field(
+          'answers',
+          TypeSpec.list(
+            TypeSpec.object([
+              Field('question_id', TypeSpec.string()),
+              Field('values', TypeSpec.list(TypeSpec.string())),
+              Field('answered_at', TypeSpec.timestamp()),
+            ]),
+          ),
+        ),
+      ]),
+    ),
     // Invocation values from the host: the answered_at of the last answer and
     // the seed.
     Field('now', TypeSpec.timestamp()),
@@ -88,9 +107,7 @@ final ContractDescriptor questionFollowUpContract = ContractDescriptor(
     // empty => the presentation is complete.
     Field(
       'questions',
-      TypeSpec.list(TypeSpec.object([
-        Field('id', TypeSpec.string()),
-      ])),
+      TypeSpec.list(TypeSpec.object([Field('id', TypeSpec.string())])),
       required: false,
       nullable: true,
     ),

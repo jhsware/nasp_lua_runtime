@@ -56,17 +56,22 @@ const List<String> _roundTypes = ['beep', 'follow_up'];
 /// latency (`delta_seconds`). Each answer carries its `values` — this is the
 /// kind whose input includes answer values.
 TypeSpec _roundObject() => TypeSpec.object([
-      Field('scheduled_at', TypeSpec.timestamp()),
-      Field('answered_at', TypeSpec.timestamp()),
-      Field('delta_seconds', TypeSpec.integer()),
-      Field('type', TypeSpec.enumeration(_roundTypes)),
-      Field('tag', TypeSpec.string(), required: false, nullable: true),
-      Field('answers', TypeSpec.list(TypeSpec.object([
+  Field('scheduled_at', TypeSpec.timestamp()),
+  Field('answered_at', TypeSpec.timestamp()),
+  Field('delta_seconds', TypeSpec.integer()),
+  Field('type', TypeSpec.enumeration(_roundTypes)),
+  Field('tag', TypeSpec.string(), required: false, nullable: true),
+  Field(
+    'answers',
+    TypeSpec.list(
+      TypeSpec.object([
         Field('question_id', TypeSpec.string()),
         Field('values', TypeSpec.list(TypeSpec.string())),
         Field('answered_at', TypeSpec.timestamp()),
-      ]))),
-    ]);
+      ]),
+    ),
+  ),
+]);
 
 /// The frozen `follow_up` contract descriptor.
 final ContractDescriptor followUpContract = ContractDescriptor(
@@ -79,27 +84,46 @@ final ContractDescriptor followUpContract = ContractDescriptor(
     // the server hosts always supply it, legacy hosts may omit it.
     Field('settings', resolvedSettingsSpec(), required: false, nullable: true),
     // Participant-specific data the script analyses.
-    Field('signals', TypeSpec.object([
-      Field('participant_id', TypeSpec.string(),
-          constraint: const Constraint(nonEmpty: true)),
-      // The round the participant just answered.
-      Field('current_round', _roundObject()),
-      // Rounds answered during the 24 h before `now`, grouped per round and
-      // ordered by `scheduled_at`.
-      Field('recent_rounds', TypeSpec.list(_roundObject())),
-      // The whole session timeline, so the script can see what is scheduled
-      // and which entries have already been answered.
-      Field('schedule', TypeSpec.list(TypeSpec.object([
-        Field('trigger_at', TypeSpec.timestamp()),
-        Field('tag', TypeSpec.string(), required: false, nullable: true),
-        Field('type', TypeSpec.enumeration(_roundTypes)),
-        Field('answered', TypeSpec.boolean()),
-        Field('answered_at', TypeSpec.timestamp(),
-            required: false, nullable: true),
-        Field('delta_seconds', TypeSpec.integer(),
-            required: false, nullable: true),
-      ]))),
-    ])),
+    Field(
+      'signals',
+      TypeSpec.object([
+        Field(
+          'participant_id',
+          TypeSpec.string(),
+          constraint: const Constraint(nonEmpty: true),
+        ),
+        // The round the participant just answered.
+        Field('current_round', _roundObject()),
+        // Rounds answered during the 24 h before `now`, grouped per round and
+        // ordered by `scheduled_at`.
+        Field('recent_rounds', TypeSpec.list(_roundObject())),
+        // The whole session timeline, so the script can see what is scheduled
+        // and which entries have already been answered.
+        Field(
+          'schedule',
+          TypeSpec.list(
+            TypeSpec.object([
+              Field('trigger_at', TypeSpec.timestamp()),
+              Field('tag', TypeSpec.string(), required: false, nullable: true),
+              Field('type', TypeSpec.enumeration(_roundTypes)),
+              Field('answered', TypeSpec.boolean()),
+              Field(
+                'answered_at',
+                TypeSpec.timestamp(),
+                required: false,
+                nullable: true,
+              ),
+              Field(
+                'delta_seconds',
+                TypeSpec.integer(),
+                required: false,
+                nullable: true,
+              ),
+            ]),
+          ),
+        ),
+      ]),
+    ),
     // Invocation values from the host: the answered round's completion
     // instant (in simulation this equals the trigger time) and the seed.
     Field('now', TypeSpec.timestamp()),

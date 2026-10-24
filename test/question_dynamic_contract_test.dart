@@ -7,67 +7,67 @@ const _runtime = LuaScriptRuntime();
 // the `step` group, the `signals` group and the invocation values `now` and
 // `seed`. The root question r1 is dynamic and has options; f1 is fixed.
 Map<String, Object?> _input({int stepIndex = 1}) => {
-      'question': <String, Object?>{
-        'id': 'bq1',
-        'root_question_id': 'r1',
-        'questions': <Object?>[
-          <String, Object?>{
-            'id': 'r1',
-            'role': 'root',
-            'type': 'multipleChoice',
-            'tags': <Object?>['stress'],
-            'position': 0,
-            'dynamic': true,
-            'text': 'How stressed are you?',
-            'options': <Object?>[
-              <String, Object?>{'label': 'Low', 'value': '1', 'position': 0},
-              <String, Object?>{'label': 'High', 'value': '2', 'position': 1},
-            ],
-          },
-          <String, Object?>{
-            'id': 'f1',
-            'role': 'follow_up',
-            'type': 'text',
-            'tags': <Object?>['high_stress'],
-            'position': 1,
-            'dynamic': false,
-            'text': 'What is the cause?',
-            'options': <Object?>[],
-          },
+  'question': <String, Object?>{
+    'id': 'bq1',
+    'root_question_id': 'r1',
+    'questions': <Object?>[
+      <String, Object?>{
+        'id': 'r1',
+        'role': 'root',
+        'type': 'multipleChoice',
+        'tags': <Object?>['stress'],
+        'position': 0,
+        'dynamic': true,
+        'text': 'How stressed are you?',
+        'options': <Object?>[
+          <String, Object?>{'label': 'Low', 'value': '1', 'position': 0},
+          <String, Object?>{'label': 'High', 'value': '2', 'position': 1},
         ],
       },
-      'step': <String, Object?>{
-        'index': stepIndex,
-        'question_ids': stepIndex == 0 ? <Object?>['r1'] : <Object?>['f1'],
+      <String, Object?>{
+        'id': 'f1',
+        'role': 'follow_up',
+        'type': 'text',
+        'tags': <Object?>['high_stress'],
+        'position': 1,
+        'dynamic': false,
+        'text': 'What is the cause?',
+        'options': <Object?>[],
       },
-      'signals': <String, Object?>{
-        'participant_id': 'p1',
-        'answers': stepIndex == 0
-            ? <Object?>[]
-            : <Object?>[
-                <String, Object?>{
-                  'question_id': 'r1',
-                  'values': <Object?>['2'],
-                  'answered_at': '2026-06-02T09:05:00.000Z',
-                },
-              ],
-        'earlier_presentations': <Object?>[
+    ],
+  },
+  'step': <String, Object?>{
+    'index': stepIndex,
+    'question_ids': stepIndex == 0 ? <Object?>['r1'] : <Object?>['f1'],
+  },
+  'signals': <String, Object?>{
+    'participant_id': 'p1',
+    'answers': stepIndex == 0
+        ? <Object?>[]
+        : <Object?>[
+            <String, Object?>{
+              'question_id': 'r1',
+              'values': <Object?>['2'],
+              'answered_at': '2026-06-02T09:05:00.000Z',
+            },
+          ],
+    'earlier_presentations': <Object?>[
+      <String, Object?>{
+        'schedule_entry_id': 'se1',
+        'answered_at': '2026-06-01T09:06:00.000Z',
+        'answers': <Object?>[
           <String, Object?>{
-            'schedule_entry_id': 'se1',
+            'question_id': 'r1',
+            'values': <Object?>['1'],
             'answered_at': '2026-06-01T09:06:00.000Z',
-            'answers': <Object?>[
-              <String, Object?>{
-                'question_id': 'r1',
-                'values': <Object?>['1'],
-                'answered_at': '2026-06-01T09:06:00.000Z',
-              },
-            ],
           },
         ],
       },
-      'now': '2026-06-02T09:05:00.000Z',
-      'seed': 42,
-    };
+    ],
+  },
+  'now': '2026-06-02T09:05:00.000Z',
+  'seed': 42,
+};
 
 Map<String, Object?> _group(Map<String, Object?> input, String name) =>
     input[name] as Map<String, Object?>;
@@ -80,15 +80,16 @@ Map<String, Object?> _earlier(Map<String, Object?> input, int index) =>
     (_group(input, 'signals')['earlier_presentations'] as List)[index]
         as Map<String, Object?>;
 
-Map<String, Object?> _validate(Map<String, Object?> input) =>
-    contractFor(ScriptKind.questionDynamic)!
-        .input
-        .validate(input, part: ScriptKind.questionDynamic, input: true);
+Map<String, Object?> _validate(Map<String, Object?> input) => contractFor(
+  ScriptKind.questionDynamic,
+)!.input.validate(input, part: ScriptKind.questionDynamic, input: true);
 
-Matcher _inputInvalidAt(String path) => throwsA(isA<ScriptError>()
-    .having((e) => e.type, 'type', ScriptErrorType.inputInvalid)
-    .having((e) => e.part, 'part', ScriptKind.questionDynamic)
-    .having((e) => e.path, 'path', path));
+Matcher _inputInvalidAt(String path) => throwsA(
+  isA<ScriptError>()
+      .having((e) => e.type, 'type', ScriptErrorType.inputInvalid)
+      .having((e) => e.part, 'part', ScriptKind.questionDynamic)
+      .having((e) => e.path, 'path', path),
+);
 
 void main() {
   group('question_dynamic descriptor', () {
@@ -109,8 +110,7 @@ void main() {
           .map((f) => (f as Map)['name'])
           .toList();
       expect(inNames, ['question', 'step', 'signals', 'now', 'seed']);
-      final outFields =
-          ((json['output'] as Map)['fields'] as List).cast<Map>();
+      final outFields = ((json['output'] as Map)['fields'] as List).cast<Map>();
       expect(outFields.map((f) => f['name']).toList(), ['questions', 'reason']);
       for (final f in outFields) {
         expect(f['required'], isFalse, reason: '${f['name']}');
@@ -158,22 +158,28 @@ void main() {
     test('a member without dynamic is inputInvalid at its path', () {
       final bad = _input();
       _member(bad, 0).remove('dynamic');
-      expect(() => _validate(bad),
-          _inputInvalidAt('question.questions[0].dynamic'));
+      expect(
+        () => _validate(bad),
+        _inputInvalidAt('question.questions[0].dynamic'),
+      );
     });
 
     test('an earlier presentation without answered_at is inputInvalid', () {
       final bad = _input();
       _earlier(bad, 0).remove('answered_at');
-      expect(() => _validate(bad),
-          _inputInvalidAt('signals.earlier_presentations[0].answered_at'));
+      expect(
+        () => _validate(bad),
+        _inputInvalidAt('signals.earlier_presentations[0].answered_at'),
+      );
     });
 
     test('a signals group without earlier_presentations is inputInvalid', () {
       final bad = _input();
       _group(bad, 'signals').remove('earlier_presentations');
-      expect(() => _validate(bad),
-          _inputInvalidAt('signals.earlier_presentations'));
+      expect(
+        () => _validate(bad),
+        _inputInvalidAt('signals.earlier_presentations'),
+      );
     });
 
     test('an empty participant_id is rejected', () {
@@ -185,8 +191,11 @@ void main() {
 
   group('question_dynamic runs', () {
     test('return {} is ok and gives no questions', () {
-      final r = _runtime.run(ScriptKind.questionDynamic,
-          'function dynamic_questions(input) return {} end', _input());
+      final r = _runtime.run(
+        ScriptKind.questionDynamic,
+        'function dynamic_questions(input) return {} end',
+        _input(),
+      );
       expect(r.ok, isTrue, reason: r.error?.toString());
       expect(r.output!['questions'], isNull);
       expect(r.output!['reason'], isNull);
@@ -234,8 +243,11 @@ function dynamic_questions(input)
   return {}
 end
 ''';
-      final r =
-          _runtime.run(ScriptKind.questionDynamic, src, _input(stepIndex: 0));
+      final r = _runtime.run(
+        ScriptKind.questionDynamic,
+        src,
+        _input(stepIndex: 0),
+      );
       expect(r.ok, isTrue, reason: r.error?.toString());
       expect(r.trace, ['0:r1']);
     });
@@ -270,8 +282,11 @@ end
 
     test('an invalid input is rejected before Lua runs', () {
       final bad = _input()..remove('step');
-      final r = _runtime.run(ScriptKind.questionDynamic,
-          'function dynamic_questions(input) return {} end', bad);
+      final r = _runtime.run(
+        ScriptKind.questionDynamic,
+        'function dynamic_questions(input) return {} end',
+        bad,
+      );
       expect(r.ok, isFalse);
       expect(r.error!.type, ScriptErrorType.inputInvalid);
       expect(r.error!.path, 'step');
@@ -281,18 +296,25 @@ end
   group('question_dynamic compile', () {
     test('a source with dynamic_questions compiles', () {
       expect(
-          _runtime.compile(ScriptKind.questionDynamic,
-              'function dynamic_questions(input) return {} end'),
-          isNull);
+        _runtime.compile(
+          ScriptKind.questionDynamic,
+          'function dynamic_questions(input) return {} end',
+        ),
+        isNull,
+      );
     });
 
     test('a source without dynamic_questions gives the entry point error', () {
-      final e = _runtime.compile(ScriptKind.questionDynamic,
-          'function follow_up_questions(input) return {} end');
+      final e = _runtime.compile(
+        ScriptKind.questionDynamic,
+        'function follow_up_questions(input) return {} end',
+      );
       expect(e, isNotNull);
       expect(e!.part, ScriptKind.questionDynamic);
       expect(
-          e.message, contains("entry point 'dynamic_questions' is not defined"));
+        e.message,
+        contains("entry point 'dynamic_questions' is not defined"),
+      );
     });
   });
 
@@ -301,8 +323,7 @@ end
       expect(ScriptKind.values.last, ScriptKind.questionDynamic);
       expect(ScriptKind.values, hasLength(5));
       expect(ScriptKind.questionDynamic.id, 'question_dynamic');
-      expect(
-          ScriptKind.fromId('question_dynamic'), ScriptKind.questionDynamic);
+      expect(ScriptKind.fromId('question_dynamic'), ScriptKind.questionDynamic);
     });
 
     test('bundleParts is unchanged and has no question_dynamic', () {
@@ -311,8 +332,10 @@ end
         ScriptKind.questionSelection,
         ScriptKind.followUp,
       ]);
-      expect(ScriptKind.bundleParts,
-          isNot(contains(ScriptKind.questionDynamic)));
+      expect(
+        ScriptKind.bundleParts,
+        isNot(contains(ScriptKind.questionDynamic)),
+      );
     });
   });
 }

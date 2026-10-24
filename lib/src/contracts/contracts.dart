@@ -21,12 +21,12 @@ export 'scheduling.dart';
 /// All contract descriptors, keyed by [ScriptKind].
 final Map<ScriptKind, ContractDescriptor> scriptContracts =
     Map.unmodifiable(<ScriptKind, ContractDescriptor>{
-  ScriptKind.scheduling: schedulingContract,
-  ScriptKind.questionSelection: questionSelectionContract,
-  ScriptKind.followUp: followUpContract,
-  ScriptKind.questionFollowUp: questionFollowUpContract,
-  ScriptKind.questionDynamic: questionDynamicContract,
-});
+      ScriptKind.scheduling: schedulingContract,
+      ScriptKind.questionSelection: questionSelectionContract,
+      ScriptKind.followUp: followUpContract,
+      ScriptKind.questionFollowUp: questionFollowUpContract,
+      ScriptKind.questionDynamic: questionDynamicContract,
+    });
 
 /// The contract descriptor for [kind], or null if the host has none.
 ContractDescriptor? contractFor(ScriptKind kind) => scriptContracts[kind];
