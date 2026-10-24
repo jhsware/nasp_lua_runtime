@@ -80,7 +80,13 @@ enum SettingsEditKind {
 
 /// A (possibly nested) type in the schema tree.
 class TypeSpec {
-  TypeSpec._(this.type, {this.element, this.value, this.fields, this.enumValues});
+  TypeSpec._(
+    this.type, {
+    this.element,
+    this.value,
+    this.fields,
+    this.enumValues,
+  });
 
   final SchemaType type;
 
@@ -103,11 +109,11 @@ class TypeSpec {
   TypeSpec.timestamp() : this._(SchemaType.timestamp);
   TypeSpec.json() : this._(SchemaType.json);
   TypeSpec.enumeration(List<String> values)
-      : this._(SchemaType.enumeration, enumValues: values);
+    : this._(SchemaType.enumeration, enumValues: values);
   TypeSpec.list(TypeSpec element) : this._(SchemaType.list, element: element);
   TypeSpec.map(TypeSpec value) : this._(SchemaType.map, value: value);
   TypeSpec.object(List<Field> fields)
-      : this._(SchemaType.object, fields: fields);
+    : this._(SchemaType.object, fields: fields);
 
   /// Parse a type node of the frozen descriptor wire shape (the inverse of
   /// [toJson]). Throws [FormatException] with a path-qualified message when
@@ -139,15 +145,18 @@ class TypeSpec {
             values.isEmpty ||
             values.any((v) => v is! String)) {
           throw FormatException(
-              _at(path, 'enum requires non-empty string "values"'));
+            _at(path, 'enum requires non-empty string "values"'),
+          );
         }
         return TypeSpec.enumeration(values.cast<String>());
       case 'list':
         return TypeSpec.list(
-            TypeSpec.fromJson(json['element'], path: '$path.element'));
+          TypeSpec.fromJson(json['element'], path: '$path.element'),
+        );
       case 'map':
         return TypeSpec.map(
-            TypeSpec.fromJson(json['value'], path: '$path.value'));
+          TypeSpec.fromJson(json['value'], path: '$path.value'),
+        );
       case 'object':
         final fields = json['fields'];
         if (fields is! List) {
@@ -292,11 +301,7 @@ class Constraint {
     if (nonEmpty != null && nonEmpty is! bool) {
       throw FormatException(_at(path, '"non_empty" must be a bool'));
     }
-    return Constraint(
-      min: min,
-      max: max,
-      nonEmpty: nonEmpty == true,
-    );
+    return Constraint(min: min, max: max, nonEmpty: nonEmpty == true);
   }
 
   /// True when [value] is absent, a `num`, or a non-empty `String`.
@@ -304,10 +309,10 @@ class Constraint {
       value == null || value is num || (value is String && value.isNotEmpty);
 
   Map<String, Object?> toJson() => {
-        if (min != null) 'min': min,
-        if (max != null) 'max': max,
-        if (nonEmpty) 'non_empty': true,
-      };
+    if (min != null) 'min': min,
+    if (max != null) 'max': max,
+    if (nonEmpty) 'non_empty': true,
+  };
 }
 
 /// One field of an object schema.
@@ -515,9 +520,7 @@ class Field {
     }
     final participantEditable = json['participant_editable'];
     if (participantEditable != null && participantEditable is! bool) {
-      throw FormatException(
-        _at(path, '"participant_editable" must be a bool'),
-      );
+      throw FormatException(_at(path, '"participant_editable" must be a bool'));
     }
     final field = Field(
       name,
@@ -551,25 +554,31 @@ class Field {
   void _checkEditContract(String path) {
     final kind = editKind;
     if (format == formatTimeSpan && kind != SettingsEditKind.timeSpan) {
-      throw FormatException(_at(
-        path,
-        'format "time_span" requires an object with string fields start '
-        'and end (format time)',
-      ));
+      throw FormatException(
+        _at(
+          path,
+          'format "time_span" requires an object with string fields start '
+          'and end (format time)',
+        ),
+      );
     }
     if (format == formatDateSpan && kind != SettingsEditKind.dateSpan) {
-      throw FormatException(_at(
-        path,
-        'format "date_span" requires an object with string fields start '
-        'and end (format date)',
-      ));
+      throw FormatException(
+        _at(
+          path,
+          'format "date_span" requires an object with string fields start '
+          'and end (format date)',
+        ),
+      );
     }
     if (participantEditable && kind == null) {
-      throw FormatException(_at(
-        path,
-        'participant_editable requires one of: '
-        '${SettingsEditKind.values.map((k) => k.wireName).join(', ')}',
-      ));
+      throw FormatException(
+        _at(
+          path,
+          'participant_editable requires one of: '
+          '${SettingsEditKind.values.map((k) => k.wireName).join(', ')}',
+        ),
+      );
     }
     final c = constraint;
     if (c == null) return;
@@ -582,25 +591,27 @@ class Field {
     }
     if ((c.stringMin != null || c.stringMax != null) &&
         !_stringBoundKinds.contains(kind)) {
-      throw FormatException(_at(
-        path,
-        'string bounds require a time, date, time_span or date_span field',
-      ));
+      throw FormatException(
+        _at(
+          path,
+          'string bounds require a time, date, time_span or date_span field',
+        ),
+      );
     }
   }
 
   Map<String, Object?> toJson() => {
-        'name': name,
-        'type': type.toJson(),
-        'required': required,
-        'nullable': nullable,
-        if (constraint != null) 'constraint': constraint!.toJson(),
-        if (defaultValue != null) 'default': defaultValue,
-        if (description != null) 'description': description,
-        if (fromQuestion != null) 'from_question': fromQuestion,
-        if (format != null) 'format': format,
-        if (participantEditable) 'participant_editable': true,
-      };
+    'name': name,
+    'type': type.toJson(),
+    'required': required,
+    'nullable': nullable,
+    if (constraint != null) 'constraint': constraint!.toJson(),
+    if (defaultValue != null) 'default': defaultValue,
+    if (description != null) 'description': description,
+    if (fromQuestion != null) 'from_question': fromQuestion,
+    if (format != null) 'format': format,
+    if (participantEditable) 'participant_editable': true,
+  };
 }
 
 /// A top-level object schema — the input or output side of a contract.
@@ -667,12 +678,12 @@ class ContractDescriptor {
   final Schema output;
 
   Map<String, Object?> toJson() => {
-        'kind': kind.id,
-        'entrypoint': entrypoint,
-        'io_contract_version': ioContractVersion,
-        'input': input.toJson(),
-        'output': output.toJson(),
-      };
+    'kind': kind.id,
+    'entrypoint': entrypoint,
+    'io_contract_version': ioContractVersion,
+    'input': input.toJson(),
+    'output': output.toJson(),
+  };
 }
 
 /// Walks a [TypeSpec] coercing raw JSON into typed Dart values, raising a
@@ -685,7 +696,9 @@ class _Validator {
 
   Never _fail(String path, String message) {
     throw ScriptError(
-      type: input ? ScriptErrorType.inputInvalid : ScriptErrorType.outputInvalid,
+      type: input
+          ? ScriptErrorType.inputInvalid
+          : ScriptErrorType.outputInvalid,
       part: part,
       message: message,
       path: path,
@@ -743,8 +756,10 @@ class _Validator {
       return DateTime.fromMillisecondsSinceEpoch(json * 1000, isUtc: true);
     }
     if (json is double) {
-      return DateTime.fromMillisecondsSinceEpoch((json * 1000).round(),
-          isUtc: true);
+      return DateTime.fromMillisecondsSinceEpoch(
+        (json * 1000).round(),
+        isUtc: true,
+      );
     }
     _fail(path, 'expected timestamp');
   }

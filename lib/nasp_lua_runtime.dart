@@ -8,35 +8,47 @@
 ///
 /// Public surface:
 ///  - [LuaScriptRuntime] — the sandboxed, deterministic execution engine.
-///    The sandbox has base + `math` + `string` + `table` and the host
-///    functions `now`, `random`, `log`. The engine does not support the Lua
-///    patterns: a string function that would use one (`find`/`match` with a
-///    pattern and not plain, `gmatch`, `gsub` with a pattern, a function, a
-///    table or `%` in the replacement, `reverse`) raises a clear error
+///    The sandbox has base + `math` + `string` + `table`, the host
+///    functions `now`, `random`, `log`, and the local-time helpers
+///    `local_time`, `at_clock`, `add_days`, `add_seconds` (pure functions on
+///    local epoch seconds; each counts as a host call). The engine does not
+///    support the Lua patterns: a string function that would use one
+///    (`find`/`match` with a pattern and not plain, `gmatch`, `gsub` with a
+///    pattern, a function, a table or `%` in the replacement, `reverse`)
+///    raises a clear error
 ///    (`string.<name>: Lua patterns are not supported; use <hint>`).
+///  - [LocalTimeCodec] — the conversion between an instant and the local
+///    wall-clock time in an IANA zone (the tz database of
+///    `package:timezone`), with the gap and overlap rules. Both hosts use it
+///    before and after a run (docs/design/time-model.md).
 ///  - [ScriptError] / [ScriptErrorType] / [ScriptKind] — the cross-host error
 ///    taxonomy (§6.4).
 ///  - The schema types ([Schema], [TypeSpec], [Field], [Constraint]) and the
 ///    per-kind [ContractDescriptor]s consumed by `GET /script-bundles/contracts`.
 ///  - [SettingsEditKind] — the six kinds of a participant-editable settings
 ///    field (see [Field.editKind]).
-///    Contract v2 groups every bundle input by provenance: `study` (study
-///    variables), `settings` (the resolved script settings), `signals`
-///    (participant-specific data — anything participant-specific is a
-///    signal) and top-level invocation values (`now`, `seed`, `trigger`).
-///    The `question_follow_up` kind (contract v1, never a bundle part; see
+///    The bundle kinds (contract v3) group every input by provenance: `study`
+///    (study variables, with the `zone` of the run), `settings` (the
+///    resolved script settings), `signals` (participant-specific data —
+///    anything participant-specific is a signal) and top-level invocation
+///    values (`now`, `seed`, `trigger`).
+///    The `question_follow_up` kind (contract v2, never a bundle part; see
 ///    [ScriptKind.bundleParts]) has the group `question` (the branched
-///    question and its members), `signals`, `now` and `seed`.
-///    The `question_dynamic` kind (contract v1, never a bundle part) has the
+///    question and its members), `signals`, `now`, `zone` and `seed`.
+///    The `question_dynamic` kind (contract v2, never a bundle part) has the
 ///    groups `question` (the members with `dynamic`, the base `text` and the
 ///    base `options`), `step` (`index`, `question_ids`), `signals` (with
-///    `earlier_presentations`), `now` and `seed`.
+///    `earlier_presentations`), `now`, `zone` and `seed`.
 ///    Every kind takes a `seed`: required on `question_selection`,
 ///    `follow_up`, `question_follow_up` and `question_dynamic`, optional on
 ///    `scheduling`.
+///    Every timestamp of every contract is local epoch seconds in the zone
+///    of the run; the host converts with [LocalTimeCodec]. The `follow_up`
+///    output is `{trigger_at, tag}` or `{trigger_in_seconds, tag}`.
 library;
 
 export 'src/contracts/contracts.dart';
 export 'src/errors.dart';
+export 'src/local_time.dart';
 export 'src/schema.dart';
 export 'src/vm.dart';

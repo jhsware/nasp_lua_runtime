@@ -18,11 +18,15 @@
 ///    `answers` of this presentation, in answer order. In Lua, `answers[1]` is
 ///    the answer to the root question.
 ///  - top-level — invocation values from the host: `now` (the `answered_at`
-///    of the last answer) and a `seed` for host-provided randomness.
+///    of the last answer), the `zone` of the run and a `seed` for
+///    host-provided randomness.
 ///
-/// There is no `study`, `settings` or `trigger` group in contract version 1.
-/// A branched question is in the question bank, and more than one study can
-/// use it. Adding an optional field later is additive.
+/// Every timestamp (`now`, each `answered_at`) is local epoch seconds in the
+/// zone of the run (contract 2, docs/design/time-model.md).
+///
+/// There is no `study`, `settings` or `trigger` group. A branched question is
+/// in the question bank, and more than one study can use it. Adding an
+/// optional field later is additive.
 ///
 /// As for the `follow_up` kind, this input carries answer *values*: the
 /// script cannot decide without them. A skipped question has an empty
@@ -37,7 +41,9 @@ import '../schema.dart';
 /// Contract revision (§4.5). Bump only on a breaking change.
 ///
 /// 1 (0.10.0): `question` / `signals` / invocation values.
-const int questionFollowUpContractVersion = 1;
+/// 2 (0.13.0): every timestamp is local epoch seconds in the zone of the run;
+/// a top-level `zone` (required).
+const int questionFollowUpContractVersion = 2;
 
 /// The global Lua function the runtime invokes:
 /// `follow_up_questions(input) -> output`.
@@ -54,33 +60,58 @@ final ContractDescriptor questionFollowUpContract = ContractDescriptor(
   input: Schema([
     // The branched question at the version that the participant gets. It is
     // the same for each participant.
-    Field('question', TypeSpec.object([
-      Field('id', TypeSpec.string()),
-      Field('root_question_id', TypeSpec.string()),
-      // All members at that version, ordered by position.
-      Field('questions', TypeSpec.list(TypeSpec.object([
+    Field(
+      'question',
+      TypeSpec.object([
         Field('id', TypeSpec.string()),
-        Field('role', TypeSpec.enumeration(_memberRoles)),
-        Field('type', TypeSpec.string()),
-        Field('tags', TypeSpec.list(TypeSpec.string())),
-        Field('position', TypeSpec.integer()),
-      ]))),
-    ])),
+        Field('root_question_id', TypeSpec.string()),
+        // All members at that version, ordered by position.
+        Field(
+          'questions',
+          TypeSpec.list(
+            TypeSpec.object([
+              Field('id', TypeSpec.string()),
+              Field('role', TypeSpec.enumeration(_memberRoles)),
+              Field('type', TypeSpec.string()),
+              Field('tags', TypeSpec.list(TypeSpec.string())),
+              Field('position', TypeSpec.integer()),
+            ]),
+          ),
+        ),
+      ]),
+    ),
     // Data about this participant.
-    Field('signals', TypeSpec.object([
-      Field('participant_id', TypeSpec.string(),
-          constraint: const Constraint(nonEmpty: true)),
-      // The answers of this presentation, in answer order. The values list is
-      // empty when the participant skipped the question.
-      Field('answers', TypeSpec.list(TypeSpec.object([
-        Field('question_id', TypeSpec.string()),
-        Field('values', TypeSpec.list(TypeSpec.string())),
-        Field('answered_at', TypeSpec.timestamp()),
-      ]))),
-    ])),
-    // Invocation values from the host: the answered_at of the last answer and
-    // the seed.
+    Field(
+      'signals',
+      TypeSpec.object([
+        Field(
+          'participant_id',
+          TypeSpec.string(),
+          constraint: const Constraint(nonEmpty: true),
+        ),
+        // The answers of this presentation, in answer order. The values list is
+        // empty when the participant skipped the question.
+        Field(
+          'answers',
+          TypeSpec.list(
+            TypeSpec.object([
+              Field('question_id', TypeSpec.string()),
+              Field('values', TypeSpec.list(TypeSpec.string())),
+              Field('answered_at', TypeSpec.timestamp()),
+            ]),
+          ),
+        ),
+      ]),
+    ),
+    // Invocation values from the host: the answered_at of the last answer
+    // (local epoch seconds in the zone of the run), the IANA zone of the run,
+    // and the seed.
     Field('now', TypeSpec.timestamp()),
+    Field(
+      'zone',
+      TypeSpec.string(),
+      constraint: const Constraint(nonEmpty: true),
+    ),
     Field('seed', TypeSpec.integer()),
   ]),
   output: Schema([
@@ -88,9 +119,7 @@ final ContractDescriptor questionFollowUpContract = ContractDescriptor(
     // empty => the presentation is complete.
     Field(
       'questions',
-      TypeSpec.list(TypeSpec.object([
-        Field('id', TypeSpec.string()),
-      ])),
+      TypeSpec.list(TypeSpec.object([Field('id', TypeSpec.string())])),
       required: false,
       nullable: true,
     ),

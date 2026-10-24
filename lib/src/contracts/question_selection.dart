@@ -5,8 +5,8 @@
 /// value comes from:
 ///
 ///  - `study` — study variables, the same for every participant of the study:
-///    the in-scope `question_sets` and `questions` (ids + light metadata
-///    mirroring `nasp_questionnaire`).
+///    the `zone` of the run and the in-scope `question_sets` and `questions`
+///    (ids + light metadata mirroring `nasp_questionnaire`).
 ///  - `settings` — the resolved script settings (optional; the server hosts
 ///    supply it so selection can read `settings.rule`). A participant-scope
 ///    override wins over the study-scope settings.
@@ -16,6 +16,9 @@
 ///    usage (additive). Anything participant-specific is a signal.
 ///  - top-level — invocation values from the host: the `trigger` (time and
 ///    tag) and a `seed` for host-provided randomness.
+///
+/// Every timestamp is local epoch seconds in the zone of the run (contract
+/// v3, docs/design/time-model.md).
 ///
 /// Output is the ordered list of question/set ids to present plus an optional
 /// `reason`.
@@ -29,7 +32,9 @@ import 'scheduling.dart' show resolvedSettingsSpec;
 ///
 /// 2 (0.6.0): grouped input — `study` / `settings` / `signals` / invocation
 /// values; `answer_history` became `signals.answers`.
-const int questionSelectionContractVersion = 2;
+/// 3 (0.13.0): every timestamp is local epoch seconds in the zone of the run;
+/// `study.zone` added (required).
+const int questionSelectionContractVersion = 3;
 
 /// The global Lua function the runtime invokes:
 /// `select_questions(input) -> output`.
@@ -42,48 +47,101 @@ final ContractDescriptor questionSelectionContract = ContractDescriptor(
   ioContractVersion: questionSelectionContractVersion,
   input: Schema([
     // Study variables — the same for every participant of the study.
-    Field('study', TypeSpec.object([
-      Field('question_sets', TypeSpec.list(TypeSpec.object([
-        Field('id', TypeSpec.string()),
-        Field('name', TypeSpec.string(), required: false, nullable: true),
-        Field('state', TypeSpec.string(), required: false, nullable: true),
-      ]))),
-      Field('questions', TypeSpec.list(TypeSpec.object([
-        Field('id', TypeSpec.string()),
-        Field('question_set_id', TypeSpec.string(),
-            required: false, nullable: true),
-        Field('type', TypeSpec.string(), required: false, nullable: true),
-        Field('tags', TypeSpec.list(TypeSpec.string()), required: false),
-        Field('set_position', TypeSpec.integer(),
-            required: false, nullable: true),
-      ]))),
-    ])),
+    Field(
+      'study',
+      TypeSpec.object([
+        // The IANA zone this run resolves local times in.
+        Field(
+          'zone',
+          TypeSpec.string(),
+          constraint: const Constraint(nonEmpty: true),
+        ),
+        Field(
+          'question_sets',
+          TypeSpec.list(
+            TypeSpec.object([
+              Field('id', TypeSpec.string()),
+              Field('name', TypeSpec.string(), required: false, nullable: true),
+              Field(
+                'state',
+                TypeSpec.string(),
+                required: false,
+                nullable: true,
+              ),
+            ]),
+          ),
+        ),
+        Field(
+          'questions',
+          TypeSpec.list(
+            TypeSpec.object([
+              Field('id', TypeSpec.string()),
+              Field(
+                'question_set_id',
+                TypeSpec.string(),
+                required: false,
+                nullable: true,
+              ),
+              Field('type', TypeSpec.string(), required: false, nullable: true),
+              Field('tags', TypeSpec.list(TypeSpec.string()), required: false),
+              Field(
+                'set_position',
+                TypeSpec.integer(),
+                required: false,
+                nullable: true,
+              ),
+            ]),
+          ),
+        ),
+      ]),
+    ),
     // The resolved script settings (settings.rule = script-specific
     // settings; participant-scope override wins over study scope). Optional —
     // the server hosts always supply it, legacy hosts may omit it.
     Field('settings', resolvedSettingsSpec(), required: false, nullable: true),
     // Participant-specific data the script analyses.
-    Field('signals', TypeSpec.object([
-      Field('participant_id', TypeSpec.string(),
-          constraint: const Constraint(nonEmpty: true)),
-      // The recent answer history: ids + timestamps only, never values.
-      Field('answers', TypeSpec.list(TypeSpec.object([
-        Field('question_id', TypeSpec.string()),
-        Field('answered_at', TypeSpec.timestamp()),
-      ]))),
-    ])),
-    // Invocation values from the host.
-    Field('trigger', TypeSpec.object([
-      Field('time', TypeSpec.timestamp()),
-      Field('tag', TypeSpec.string(), required: false, nullable: true),
-    ])),
+    Field(
+      'signals',
+      TypeSpec.object([
+        Field(
+          'participant_id',
+          TypeSpec.string(),
+          constraint: const Constraint(nonEmpty: true),
+        ),
+        // The recent answer history: ids + timestamps only, never values.
+        // answered_at is local epoch seconds in the zone of the run.
+        Field(
+          'answers',
+          TypeSpec.list(
+            TypeSpec.object([
+              Field('question_id', TypeSpec.string()),
+              Field('answered_at', TypeSpec.timestamp()),
+            ]),
+          ),
+        ),
+      ]),
+    ),
+    // Invocation values from the host. trigger.time is local epoch seconds
+    // in the zone of the run.
+    Field(
+      'trigger',
+      TypeSpec.object([
+        Field('time', TypeSpec.timestamp()),
+        Field('tag', TypeSpec.string(), required: false, nullable: true),
+      ]),
+    ),
     Field('seed', TypeSpec.integer()),
   ]),
   output: Schema([
-    Field('items', TypeSpec.list(TypeSpec.object([
-      Field('id', TypeSpec.string()),
-      Field('kind', TypeSpec.enumeration(['question', 'set'])),
-    ]))),
+    Field(
+      'items',
+      TypeSpec.list(
+        TypeSpec.object([
+          Field('id', TypeSpec.string()),
+          Field('kind', TypeSpec.enumeration(['question', 'set'])),
+        ]),
+      ),
+    ),
     Field('reason', TypeSpec.string(), required: false, nullable: true),
   ]),
 );

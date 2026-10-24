@@ -3,49 +3,51 @@ import 'package:test/test.dart';
 
 const _runtime = LuaScriptRuntime();
 
-// A valid question_follow_up input (contract version 1): the `question`
-// group, the `signals` group and the invocation values `now` and `seed`.
+// A valid question_follow_up input (contract version 2): the `question`
+// group, the `signals` group and the invocation values `now`, `zone` and
+// `seed`.
 Map<String, Object?> _input() => {
-      'question': <String, Object?>{
-        'id': 'bq1',
-        'root_question_id': 'r1',
-        'questions': <Object?>[
-          <String, Object?>{
-            'id': 'r1',
-            'role': 'root',
-            'type': 'likert',
-            'tags': <Object?>['stress'],
-            'position': 0,
-          },
-          <String, Object?>{
-            'id': 'f1',
-            'role': 'follow_up',
-            'type': 'text',
-            'tags': <Object?>['high_stress'],
-            'position': 1,
-          },
-          <String, Object?>{
-            'id': 'f2',
-            'role': 'follow_up',
-            'type': 'scale',
-            'tags': <Object?>[],
-            'position': 2,
-          },
-        ],
+  'question': <String, Object?>{
+    'id': 'bq1',
+    'root_question_id': 'r1',
+    'questions': <Object?>[
+      <String, Object?>{
+        'id': 'r1',
+        'role': 'root',
+        'type': 'likert',
+        'tags': <Object?>['stress'],
+        'position': 0,
       },
-      'signals': <String, Object?>{
-        'participant_id': 'p1',
-        'answers': <Object?>[
-          <String, Object?>{
-            'question_id': 'r1',
-            'values': <Object?>['4'],
-            'answered_at': '2026-06-01T09:05:00.000Z',
-          },
-        ],
+      <String, Object?>{
+        'id': 'f1',
+        'role': 'follow_up',
+        'type': 'text',
+        'tags': <Object?>['high_stress'],
+        'position': 1,
       },
-      'now': '2026-06-01T09:05:00.000Z',
-      'seed': 42,
-    };
+      <String, Object?>{
+        'id': 'f2',
+        'role': 'follow_up',
+        'type': 'scale',
+        'tags': <Object?>[],
+        'position': 2,
+      },
+    ],
+  },
+  'signals': <String, Object?>{
+    'participant_id': 'p1',
+    'answers': <Object?>[
+      <String, Object?>{
+        'question_id': 'r1',
+        'values': <Object?>['4'],
+        'answered_at': '2026-06-01T09:05:00.000Z',
+      },
+    ],
+  },
+  'now': '2026-06-01T09:05:00.000Z',
+  'zone': 'Europe/Stockholm',
+  'seed': 42,
+};
 
 Map<String, Object?> _group(Map<String, Object?> input, String name) =>
     input[name] as Map<String, Object?>;
@@ -58,37 +60,37 @@ Map<String, Object?> _answer(Map<String, Object?> input, int index) =>
     (_group(input, 'signals')['answers'] as List)[index]
         as Map<String, Object?>;
 
-Map<String, Object?> _validate(Map<String, Object?> input) =>
-    contractFor(ScriptKind.questionFollowUp)!
-        .input
-        .validate(input, part: ScriptKind.questionFollowUp, input: true);
+Map<String, Object?> _validate(Map<String, Object?> input) => contractFor(
+  ScriptKind.questionFollowUp,
+)!.input.validate(input, part: ScriptKind.questionFollowUp, input: true);
 
-Matcher _inputInvalidAt(String path) => throwsA(isA<ScriptError>()
-    .having((e) => e.type, 'type', ScriptErrorType.inputInvalid)
-    .having((e) => e.part, 'part', ScriptKind.questionFollowUp)
-    .having((e) => e.path, 'path', path));
+Matcher _inputInvalidAt(String path) => throwsA(
+  isA<ScriptError>()
+      .having((e) => e.type, 'type', ScriptErrorType.inputInvalid)
+      .having((e) => e.part, 'part', ScriptKind.questionFollowUp)
+      .having((e) => e.path, 'path', path),
+);
 
 void main() {
   group('question_follow_up descriptor', () {
-    test('has the entry point, contract version 1 and the field names', () {
+    test('has the entry point, contract version 2 and the field names', () {
       final d = contractFor(ScriptKind.questionFollowUp)!;
       expect(d.kind, ScriptKind.questionFollowUp);
       expect(d.entrypoint, 'follow_up_questions');
       expect(d.entrypoint, questionFollowUpEntrypoint);
-      expect(d.ioContractVersion, 1);
+      expect(d.ioContractVersion, 2);
       expect(d.ioContractVersion, questionFollowUpContractVersion);
       expect(identical(d, questionFollowUpContract), isTrue);
 
       final json = d.toJson();
       expect(json['kind'], 'question_follow_up');
       expect(json['entrypoint'], 'follow_up_questions');
-      expect(json['io_contract_version'], 1);
+      expect(json['io_contract_version'], 2);
       final inNames = ((json['input'] as Map)['fields'] as List)
           .map((f) => (f as Map)['name'])
           .toList();
-      expect(inNames, ['question', 'signals', 'now', 'seed']);
-      final outFields =
-          ((json['output'] as Map)['fields'] as List).cast<Map>();
+      expect(inNames, ['question', 'signals', 'now', 'zone', 'seed']);
+      final outFields = ((json['output'] as Map)['fields'] as List).cast<Map>();
       expect(outFields.map((f) => f['name']).toList(), ['questions', 'reason']);
       for (final f in outFields) {
         expect(f['required'], isFalse, reason: '${f['name']}');
@@ -119,7 +121,9 @@ void main() {
       final bad = _input();
       _member(bad, 1)['role'] = 'other';
       expect(
-          () => _validate(bad), _inputInvalidAt('question.questions[1].role'));
+        () => _validate(bad),
+        _inputInvalidAt('question.questions[1].role'),
+      );
     });
 
     test('an empty participant_id is rejected', () {
@@ -128,20 +132,25 @@ void main() {
       expect(() => _validate(bad), _inputInvalidAt('signals.participant_id'));
     });
 
-    test('an answer with an empty values list is valid (a skipped question)',
-        () {
-      final input = _input();
-      _answer(input, 0)['values'] = <Object?>[];
-      final out = _validate(input);
-      final answers = _group(out, 'signals')['answers'] as List;
-      expect((answers[0] as Map)['values'], isEmpty);
-    });
+    test(
+      'an answer with an empty values list is valid (a skipped question)',
+      () {
+        final input = _input();
+        _answer(input, 0)['values'] = <Object?>[];
+        final out = _validate(input);
+        final answers = _group(out, 'signals')['answers'] as List;
+        expect((answers[0] as Map)['values'], isEmpty);
+      },
+    );
   });
 
   group('question_follow_up runs', () {
     test('return {} is ok and gives no questions', () {
-      final r = _runtime.run(ScriptKind.questionFollowUp,
-          'function follow_up_questions(input) return {} end', _input());
+      final r = _runtime.run(
+        ScriptKind.questionFollowUp,
+        'function follow_up_questions(input) return {} end',
+        _input(),
+      );
       expect(r.ok, isTrue, reason: r.error?.toString());
       expect(r.output!['questions'], isNull);
       expect(r.output!['reason'], isNull);
@@ -149,9 +158,10 @@ void main() {
 
     test('return { questions = {} } is ok', () {
       final r = _runtime.run(
-          ScriptKind.questionFollowUp,
-          'function follow_up_questions(input) return { questions = {} } end',
-          _input());
+        ScriptKind.questionFollowUp,
+        'function follow_up_questions(input) return { questions = {} } end',
+        _input(),
+      );
       expect(r.ok, isTrue, reason: r.error?.toString());
       expect(r.output!['questions'], isEmpty);
     });
@@ -204,8 +214,11 @@ end
     });
 
     test('a script that returns nothing is outputInvalid', () {
-      final r = _runtime.run(ScriptKind.questionFollowUp,
-          'function follow_up_questions(input) end', _input());
+      final r = _runtime.run(
+        ScriptKind.questionFollowUp,
+        'function follow_up_questions(input) end',
+        _input(),
+      );
       expect(r.ok, isFalse);
       expect(r.error!.type, ScriptErrorType.outputInvalid);
       expect(r.error!.message, contains('expected object'));
@@ -213,8 +226,11 @@ end
 
     test('an invalid input is rejected before Lua runs', () {
       final bad = _input()..remove('signals');
-      final r = _runtime.run(ScriptKind.questionFollowUp,
-          'function follow_up_questions(input) return {} end', bad);
+      final r = _runtime.run(
+        ScriptKind.questionFollowUp,
+        'function follow_up_questions(input) return {} end',
+        bad,
+      );
       expect(r.ok, isFalse);
       expect(r.error!.type, ScriptErrorType.inputInvalid);
       expect(r.error!.path, 'signals');
@@ -224,20 +240,29 @@ end
   group('question_follow_up compile', () {
     test('a source with follow_up_questions compiles', () {
       expect(
-          _runtime.compile(ScriptKind.questionFollowUp,
-              'function follow_up_questions(input) return {} end'),
-          isNull);
+        _runtime.compile(
+          ScriptKind.questionFollowUp,
+          'function follow_up_questions(input) return {} end',
+        ),
+        isNull,
+      );
     });
 
-    test('a source without follow_up_questions gives the entry point error',
-        () {
-      final e = _runtime.compile(ScriptKind.questionFollowUp,
-          'function follow_up(input) return {} end');
-      expect(e, isNotNull);
-      expect(e!.part, ScriptKind.questionFollowUp);
-      expect(e.message,
-          contains("entry point 'follow_up_questions' is not defined"));
-    });
+    test(
+      'a source without follow_up_questions gives the entry point error',
+      () {
+        final e = _runtime.compile(
+          ScriptKind.questionFollowUp,
+          'function follow_up(input) return {} end',
+        );
+        expect(e, isNotNull);
+        expect(e!.part, ScriptKind.questionFollowUp);
+        expect(
+          e.message,
+          contains("entry point 'follow_up_questions' is not defined"),
+        );
+      },
+    );
   });
 
   group('ScriptKind', () {
@@ -247,16 +272,22 @@ end
         ScriptKind.questionSelection,
         ScriptKind.followUp,
       ]);
-      expect(ScriptKind.bundleParts,
-          isNot(contains(ScriptKind.questionFollowUp)));
+      expect(
+        ScriptKind.bundleParts,
+        isNot(contains(ScriptKind.questionFollowUp)),
+      );
     });
 
     test('questionFollowUp resolves from its id and is not a bundle part', () {
       expect(ScriptKind.questionFollowUp.id, 'question_follow_up');
-      expect(ScriptKind.fromId('question_follow_up'),
-          ScriptKind.questionFollowUp);
-      expect(ScriptKind.bundleParts,
-          isNot(contains(ScriptKind.questionFollowUp)));
+      expect(
+        ScriptKind.fromId('question_follow_up'),
+        ScriptKind.questionFollowUp,
+      );
+      expect(
+        ScriptKind.bundleParts,
+        isNot(contains(ScriptKind.questionFollowUp)),
+      );
     });
   });
 }

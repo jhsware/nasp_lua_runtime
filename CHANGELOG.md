@@ -1,5 +1,75 @@
 # Changelog
 
+## 0.13.0
+
+Local time in the scripts (`docs/design/time-model.md`; the authority is
+`nasp_waves_server/docs/design/time-model.md`). A script can now schedule
+"07:00" and get 07:00 on the clock of the participant in any zone, before
+and after a DST change, with the same result on the server and on the phone.
+
+**Breaking.** Contract v3 for the bundle kinds (`scheduling`,
+`question_selection`, `follow_up`) and contract v2 for the branch kinds
+(`question_follow_up`, `question_dynamic`).
+
+- Every `timestamp` of every contract is **local epoch seconds** in the zone
+  of the run: the epoch seconds of the wall-clock time read as if it were
+  UTC (`2026-10-25 07:00` is `1792911600` in any zone). The host converts
+  each input with `LocalTimeCodec.toLocal` and each output with
+  `LocalTimeCodec.toInstant`. The marshaller does not change.
+- `scheduling`: `study.timezone` is renamed `study.zone`.
+- `question_selection`: `study.zone` is added (required). The v2 contract had
+  no zone field on this kind.
+- `follow_up`: a new `study` group with `zone` (required), before `settings`.
+- `question_follow_up` and `question_dynamic`: a top-level `zone` (required),
+  after `now`.
+- `follow_up` output: `follow_up` is `{trigger_at, tag}` (a clock time) or
+  `{trigger_in_seconds, tag}` (a duration from `now`; an int, min 1; the host
+  adds it to the instant of `now`). A non-null `follow_up` with both or with
+  neither is `outputInvalid` at the path `follow_up` with the message
+  `exactly one of trigger_at and trigger_in_seconds`
+  (`lib/src/output_rules.dart`).
+- `zone` is a non-empty string. The runtime does not check it against the tz
+  database; the host does (`LocalTimeCodec.isValidZone`).
+
+**Added.**
+
+- `LocalTimeCodec` (`lib/src/local_time.dart`, exported):
+  `toLocal(instant, zone)`, `toInstant(local, zone)`, `isValidZone(id)`. An
+  unknown zone is `ArgumentError('unknown zone: <id>')`. In a gap (a
+  wall-clock time that does not exist) `toInstant` moves forward to the
+  instant of the transition (`02:30` on 2026-03-29 in `Europe/Stockholm` is
+  `01:00Z`); in an overlap it takes the first occurrence, the earlier instant
+  (`02:30` on 2026-10-25 is `00:30Z`).
+- The host helpers (`lib/src/host_helpers.dart`), in `run` and in `compile`,
+  each counted as a host call: `local_time(ts)` (the table `{year, month,
+  day, hour, minute, second, weekday, yday}`, weekday 1 = Monday),
+  `at_clock(ts, "HH:mm")`, `add_days(ts, n)`, `add_seconds(ts, n)`. Errors:
+  `<helper>: argument <i> (<name>) must be an integer`, `<helper>: argument
+  <i> (<name>) is out of range`, `at_clock: expected "HH:mm"`. A float with
+  no fraction counts as an integer.
+- The dependency `timezone: ^0.11.0` (pure Dart) with the full tz database
+  `data/latest_all.dart` (every canonical zone and every link name; about
+  430 KB of tz data). The tz data rides on this tag: two hosts that pin
+  `v0.13.0` convert identically.
+
+**Migration of a v2 script.**
+
+- A daily clock time: `trigger_at = input.now + i * 86400` (09:00 UTC every
+  day) becomes `trigger_at = at_clock(add_days(input.now, i), "07:00")`
+  (07:00 on the clock every day).
+- The hour of a timestamp: `local_time(ts).hour` (no `os.date` in the
+  sandbox).
+- A follow-up after a duration: `trigger_at = input.now + 1800` becomes
+  `trigger_in_seconds = 1800`. A follow-up at a clock time keeps
+  `trigger_at`, now a local time (`at_clock(input.now, "20:00")`).
+- `input.study.timezone` becomes `input.study.zone`.
+- A host fills `study.zone` (or the top-level `zone`) and converts every
+  timestamp; a v2 input is `inputInvalid`.
+
+**Compatibility.** The marshalling, the sandbox seal, the string guards, the
+budgets and the seed rules do not change. `lib/` and `test/` were formatted
+with the current `dart format` in a separate commit (no code change).
+
 ## 0.12.0
 
 The string functions that would use a Lua pattern fail with a clear error.

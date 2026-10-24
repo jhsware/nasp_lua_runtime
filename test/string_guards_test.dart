@@ -14,7 +14,8 @@ void main() {
   /// Runs [body] (Lua statements that return one value) in a protected call
   /// inside the entry point. The result is `OK <value>` or `ERR <message>`.
   String run(String body) {
-    final source = 'function dynamic_questions(input) '
+    final source =
+        'function dynamic_questions(input) '
         'local ok, v = pcall(function() $body end) '
         'return { reason = (ok and "OK " or "ERR ") .. tostring(v) } end';
     final r = runtime.run(ScriptKind.questionDynamic, source, _input);
@@ -36,19 +37,26 @@ void main() {
       ('format %s %d %%', 'return string.format("%s=%d%%", "n", 4)', 'OK n=4%'),
       ('format %.1f', 'return string.format("%.1f", 2.25)', 'OK 2.3'),
       ('find, plain', 'return ("a.b"):find(".", 1, true)', 'OK 2'),
-      ('find, plain, both positions',
-          'local a, b = ("a.b"):find(".", 1, true) return a .. "," .. b',
-          'OK 2,2'),
+      (
+        'find, plain, both positions',
+        'local a, b = ("a.b"):find(".", 1, true) return a .. "," .. b',
+        'OK 2,2',
+      ),
       ('find, plain, init', 'return ("a,b,c"):find(",", 3, true)', 'OK 4'),
       ('find, plain, no match', 'return ("abc"):find("x", 1, true)', 'OK nil'),
       ('find, no special character', 'return ("abc"):find("bc")', 'OK 2'),
-      ('string.find, no special character',
-          'return string.find("abc", "bc")', 'OK 2'),
+      (
+        'string.find, no special character',
+        'return string.find("abc", "bc")',
+        'OK 2',
+      ),
       ('match, no special character', 'return ("abc"):match("bc")', 'OK bc'),
       ('match, no match', 'return ("abc"):match("x")', 'OK nil'),
-      ('gsub, no special character, with the count',
-          'local s, n = ("a-b"):gsub("b", "c") return s .. "," .. n',
-          'OK a-c,1'),
+      (
+        'gsub, no special character, with the count',
+        'local s, n = ("a-b"):gsub("b", "c") return s .. "," .. n',
+        'OK a-c,1',
+      ),
       ('gsub, limit', 'return (("aaa"):gsub("a", "b", 2))', 'OK bba'),
       (
         'split with a plain find',
@@ -67,18 +75,30 @@ void main() {
   group('forbidden (a clear error)', () {
     for (final (name, body, function) in [
       ('s:find with %d', 'return ("ab12"):find("%d")', 'string.find'),
-      ('string.find with %d', 'return string.find("ab12", "%d")',
-          'string.find'),
+      (
+        'string.find with %d',
+        'return string.find("ab12", "%d")',
+        'string.find',
+      ),
       ('find with .', 'return ("a.b"):find(".")', 'string.find'),
-      ('find with . and plain false', 'return ("a.b"):find(".", 1, false)',
-          'string.find'),
+      (
+        'find with . and plain false',
+        'return ("a.b"):find(".", 1, false)',
+        'string.find',
+      ),
       ('find with [0-9]', 'return ("ab12"):find("[0-9]")', 'string.find'),
       ('find with ^a', 'return ("abc"):find("^a")', 'string.find'),
       ('find with %.', 'return ("a.b"):find("%.")', 'string.find'),
-      ('s:match with a capture', 'return ("k=v"):match("(%a+)=(%a+)")',
-          'string.match'),
-      ('string.match with a capture',
-          'return string.match("k=v", "(%a+)=(%a+)")', 'string.match'),
+      (
+        's:match with a capture',
+        'return ("k=v"):match("(%a+)=(%a+)")',
+        'string.match',
+      ),
+      (
+        'string.match with a capture',
+        'return string.match("k=v", "(%a+)=(%a+)")',
+        'string.match',
+      ),
       ('match with %d+', 'return ("ab12"):match("%d+")', 'string.match'),
       (
         'gmatch',
@@ -86,19 +106,36 @@ void main() {
             'return o',
         'string.gmatch',
       ),
-      ('gmatch with a plain text', 'return ("ab"):gmatch("a")',
-          'string.gmatch'),
-      ('gsub with a pattern', 'return (("ab12"):gsub("%d", "x"))',
-          'string.gsub'),
-      ('gsub with a function',
-          'return (("ab"):gsub("a", function(m) return "x" end))',
-          'string.gsub'),
-      ('gsub with a table', 'return (("ab"):gsub("a", { a = "x" }))',
-          'string.gsub'),
-      ('gsub with % in the replacement',
-          'return (("ab"):gsub("a", "%1"))', 'string.gsub'),
-      ('gsub with a capture', 'return (("ab"):gsub("(a)", "x"))',
-          'string.gsub'),
+      (
+        'gmatch with a plain text',
+        'return ("ab"):gmatch("a")',
+        'string.gmatch',
+      ),
+      (
+        'gsub with a pattern',
+        'return (("ab12"):gsub("%d", "x"))',
+        'string.gsub',
+      ),
+      (
+        'gsub with a function',
+        'return (("ab"):gsub("a", function(m) return "x" end))',
+        'string.gsub',
+      ),
+      (
+        'gsub with a table',
+        'return (("ab"):gsub("a", { a = "x" }))',
+        'string.gsub',
+      ),
+      (
+        'gsub with % in the replacement',
+        'return (("ab"):gsub("a", "%1"))',
+        'string.gsub',
+      ),
+      (
+        'gsub with a capture',
+        'return (("ab"):gsub("(a)", "x"))',
+        'string.gsub',
+      ),
       ('reverse', 'return ("abc"):reverse()', 'string.reverse'),
       ('string.reverse', 'return string.reverse("abc")', 'string.reverse'),
     ]) {
@@ -111,8 +148,10 @@ void main() {
     }
 
     test('the message names the replacement', () {
-      expect(run('return ("ab12"):find("%d")'),
-          contains('use s:find(text, init, true)'));
+      expect(
+        run('return ("ab12"):find("%d")'),
+        contains('use s:find(text, init, true)'),
+      );
       expect(run('return ("abc"):reverse()'), contains('use '));
     });
 
@@ -121,7 +160,8 @@ void main() {
       // any level it gives `[unknown]`), so the function name in the message
       // is what locates the call. Probed on 2026-10-23 with lua_dardo_plus
       // 0.3.x: only VM-internal errors (`nil + 1`, `#s`) carry a line.
-      const source = 'function dynamic_questions(input)\n'
+      const source =
+          'function dynamic_questions(input)\n'
           '  local s = "ab12"\n'
           '  local n = s:find("%d")\n'
           '  return { reason = tostring(n) }\n'
@@ -130,13 +170,17 @@ void main() {
       expect(r.ok, isFalse);
       expect(r.error!.type, ScriptErrorType.runtime);
       expect(
-          r.error!.message,
-          contains('string.find: Lua patterns are not supported; '
-              'use s:find(text, init, true)'));
+        r.error!.message,
+        contains(
+          'string.find: Lua patterns are not supported; '
+          'use s:find(text, init, true)',
+        ),
+      );
     });
 
     test('a forbidden call in the top-level chunk fails compile', () {
-      const source = 'local n = ("ab12"):find("%d")\n'
+      const source =
+          'local n = ("ab12"):find("%d")\n'
           'function dynamic_questions(input) return { reason = "x" } end\n';
       final e = runtime.compile(ScriptKind.questionDynamic, source);
       expect(e, isNotNull);
@@ -147,7 +191,8 @@ void main() {
     test('# of a string gives the hint s:len() in the script error', () {
       // The hint is added when the error leaves Lua (the normal case). Inside
       // a Lua pcall the message is the engine's own message.
-      const source = 'function dynamic_questions(input)\n'
+      const source =
+          'function dynamic_questions(input)\n'
           '  local n = #"abc"\n'
           '  return { reason = tostring(n) }\n'
           'end\n';
@@ -163,23 +208,28 @@ void main() {
   group('unreachable (no original function)', () {
     test('the guarded functions exist', () {
       expect(
-          run('return tostring(string.find ~= nil and string.match ~= nil '
-              'and string.gmatch ~= nil and string.gsub ~= nil '
-              'and string.reverse ~= nil)'),
-          'OK true');
+        run(
+          'return tostring(string.find ~= nil and string.match ~= nil '
+          'and string.gmatch ~= nil and string.gsub ~= nil '
+          'and string.reverse ~= nil)',
+        ),
+        'OK true',
+      );
     });
 
     test('no global with the predicate name exists', () {
-      expect(run('return tostring(rawget(_G, "__nasp_is_pattern"))'),
-          'OK nil');
+      expect(run('return tostring(rawget(_G, "__nasp_is_pattern"))'), 'OK nil');
     });
 
     test('the method syntax reads the guarded string table', () {
-      expect(run('return tostring(getmetatable("").__index == string)'),
-          'OK true');
       expect(
-          run('return tostring(getmetatable("").__index.find == string.find)'),
-          'OK true');
+        run('return tostring(getmetatable("").__index == string)'),
+        'OK true',
+      );
+      expect(
+        run('return tostring(getmetatable("").__index.find == string.find)'),
+        'OK true',
+      );
     });
 
     test('no field of string or of the string metatable is an original', () {
@@ -187,15 +237,18 @@ void main() {
       // guard or an untouched standard function; none has a name that marks
       // a saved original.
       expect(
-          run('local bad = 0 '
-              'for k in pairs(string) do '
-              'if type(k) ~= "string" or k:find("nasp", 1, true) '
-              'or k:find("orig", 1, true) or k:find("_", 1, true) == 1 '
-              'then bad = bad + 1 end end '
-              'for k in pairs(getmetatable("")) do '
-              'if k ~= "__index" then bad = bad + 1 end end '
-              'return bad'),
-          'OK 0');
+        run(
+          'local bad = 0 '
+          'for k in pairs(string) do '
+          'if type(k) ~= "string" or k:find("nasp", 1, true) '
+          'or k:find("orig", 1, true) or k:find("_", 1, true) == 1 '
+          'then bad = bad + 1 end end '
+          'for k in pairs(getmetatable("")) do '
+          'if k ~= "__index" then bad = bad + 1 end end '
+          'return bad',
+        ),
+        'OK 0',
+      );
     });
   });
 }
@@ -227,5 +280,6 @@ const Map<String, Object?> _input = {
     'earlier_presentations': <Object?>[],
   },
   'now': '2026-03-05T09:00:00.000Z',
+  'zone': 'Europe/Stockholm',
   'seed': 1,
 };

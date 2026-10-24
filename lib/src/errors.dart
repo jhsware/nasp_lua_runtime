@@ -115,9 +115,9 @@ class ScriptError implements Exception {
 
   /// Serialise for the REST error envelope / SSE payloads.
   Map<String, Object?> toJson() => {
-        'type': type.name,
-        'part': part.id,
-        'message': message,
-        if (path != null && path!.isNotEmpty) 'path': path,
-      };
+    'type': type.name,
+    'part': part.id,
+    'message': message,
+    if (path != null && path!.isNotEmpty) 'path': path,
+  };
 }

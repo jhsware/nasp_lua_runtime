@@ -15,7 +15,9 @@ import 'package:lua_dardo_plus/lua.dart';
 
 import 'contracts/contracts.dart';
 import 'errors.dart';
+import 'host_helpers.dart';
 import 'marshal.dart';
+import 'output_rules.dart';
 import 'string_guards.dart';
 
 /// Per-invocation execution budget (§6.3). Budgets apply per part invocation.
@@ -37,7 +39,8 @@ class RuntimeBudget {
     this.maxOutputBytes = 1 << 20,
   });
 
-  /// Maximum number of host-function calls (`now`/`random`/`log`).
+  /// Maximum number of host-function calls (`now`/`random`/`log` and the
+  /// local-time helpers `local_time`/`at_clock`/`add_days`/`add_seconds`).
   final int maxHostCalls;
 
   /// Wall-clock ceiling, checked cooperatively on every host call.
@@ -97,7 +100,7 @@ class LuaScriptRuntime {
   /// bundle's `runtime_min_version` against this constant to decide whether it
   /// can execute the bundle. `test/version_test.dart` guards the two against
   /// drift.
-  static const String version = '0.12.0';
+  static const String version = '0.13.0';
 
   /// Execute one [kind] part.
   ///
@@ -118,18 +121,20 @@ class LuaScriptRuntime {
     var hostCalls = 0;
 
     ScriptRunResult err(ScriptError e) => ScriptRunResult(
-          error: e,
-          trace: trace,
-          hostCalls: hostCalls,
-          elapsed: sw.elapsed,
-        );
+      error: e,
+      trace: trace,
+      hostCalls: hostCalls,
+      elapsed: sw.elapsed,
+    );
     ScriptRunResult typed(ScriptErrorType t, String message, {String? path}) =>
         err(ScriptError(type: t, part: kind, message: message, path: path));
 
     final contract = contractFor(kind);
     if (contract == null) {
-      return typed(ScriptErrorType.contractUnsupported,
-          'no contract registered for kind ${kind.id}');
+      return typed(
+        ScriptErrorType.contractUnsupported,
+        'no contract registered for kind ${kind.id}',
+      );
     }
 
     // 1. Validate input — a bad input never enters Lua (§4.4).
@@ -205,6 +210,16 @@ class LuaScriptRuntime {
     });
     ls.setGlobal('log');
 
+    // local_time, at_clock, add_days, add_seconds -> pure functions on local
+    // epoch seconds (host_helpers.dart); each counts as a host call.
+    registerHostHelpers(
+      ls,
+      onHostCall: () {
+        hostCalls++;
+        checkBudget();
+      },
+    );
+
     // A protected-call helper. `loadString`/`pCall` may throw Dart exceptions,
     // and the protected `pCall` swallows the exception a host function throws to
     // signal a budget abort — so budgets are surfaced via [budgetReason], which
@@ -241,8 +256,10 @@ class LuaScriptRuntime {
     // 5. Resolve and invoke the entry point with the marshalled input.
     ls.getGlobal(contract.entrypoint);
     if (!ls.isFunction(-1)) {
-      return typed(ScriptErrorType.runtime,
-          "entry point '${contract.entrypoint}' is not defined");
+      return typed(
+        ScriptErrorType.runtime,
+        "entry point '${contract.entrypoint}' is not defined",
+      );
     }
     try {
       pushDartValue(ls, typedInput);
@@ -255,11 +272,14 @@ class LuaScriptRuntime {
     }
     if (callError != null) return typed(ScriptErrorType.runtime, callError);
 
-    // 6. Read + validate the output (§4.4).
+    // 6. Read + validate the output (§4.4), then the rules the schema cannot
+    // express (output_rules.dart).
     final Map<String, Object?> output;
     try {
-      output = readLuaValue(ls, contract.output.asType, '', kind)
-          as Map<String, Object?>;
+      output =
+          readLuaValue(ls, contract.output.asType, '', kind)
+              as Map<String, Object?>;
+      checkOutputRules(kind, output);
     } on ScriptError catch (e) {
       return err(e);
     }
@@ -267,8 +287,10 @@ class LuaScriptRuntime {
     // 7. Memory ceiling proxy: serialised output size.
     final bytes = utf8.encode(jsonEncode(scriptValueToJson(output)));
     if (bytes.length > budget.maxOutputBytes) {
-      return typed(ScriptErrorType.budgetExceeded,
-          'output exceeds ${budget.maxOutputBytes} bytes');
+      return typed(
+        ScriptErrorType.budgetExceeded,
+        'output exceeds ${budget.maxOutputBytes} bytes',
+      );
     }
 
     return ScriptRunResult(
@@ -299,6 +321,8 @@ class LuaScriptRuntime {
       ls.pushDartFunction((s) => 0);
       ls.setGlobal(name);
     }
+    // The real local-time helpers, so that a top-level call compiles.
+    registerHostHelpers(ls, onHostCall: () {});
     try {
       if (ls.loadString(source) != ThreadStatus.luaOk) {
         return ScriptError(
@@ -343,7 +367,8 @@ class LuaScriptRuntime {
   /// Strip every ambient capability that is not part of the sanctioned set
   /// (§6.2): no `io`/`os`/`package`/`require`/`dofile`/`loadfile`/`load`/
   /// `debug`/`print`, and no nondeterministic `math.random`. What remains is
-  /// base + `math` + `string` + `table` (plus injected `now`/`random`/`log`).
+  /// base + `math` + `string` + `table` (plus injected `now`/`random`/`log`
+  /// and the local-time helpers of `host_helpers.dart`).
   /// The string functions that would use a Lua pattern are wrapped so that
   /// they raise a clear error (`string_guards.dart`).
   void _sealSandbox(LuaState ls) {
@@ -401,8 +426,7 @@ String _withHints(String message) {
 Object? scriptValueToJson(Object? value) {
   if (value is DateTime) return value.toUtc().toIso8601String();
   if (value is Map) {
-    return value.map(
-        (k, v) => MapEntry(k.toString(), scriptValueToJson(v)));
+    return value.map((k, v) => MapEntry(k.toString(), scriptValueToJson(v)));
   }
   if (value is List) return value.map(scriptValueToJson).toList();
   return value;

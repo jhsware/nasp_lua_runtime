@@ -10,15 +10,19 @@ import 'package:test/test.dart';
 void main() {
   test('package declares no Flutter/FFI/native dependencies', () async {
     final libUri = await Isolate.resolvePackageUri(
-        Uri.parse('package:nasp_lua_runtime/nasp_lua_runtime.dart'));
+      Uri.parse('package:nasp_lua_runtime/nasp_lua_runtime.dart'),
+    );
     if (libUri == null) {
       markTestSkipped('could not resolve package URI');
       return;
     }
     // .../nasp_lua_runtime/lib/nasp_lua_runtime.dart -> ../pubspec.yaml
     final pubspec = File.fromUri(libUri.resolve('../pubspec.yaml'));
-    expect(pubspec.existsSync(), isTrue,
-        reason: 'pubspec not found at ${pubspec.path}');
+    expect(
+      pubspec.existsSync(),
+      isTrue,
+      reason: 'pubspec not found at ${pubspec.path}',
+    );
     final text = pubspec.readAsStringSync();
     for (final banned in const [
       'flutter',
@@ -28,8 +32,11 @@ void main() {
       'native_assets',
       'jni',
     ]) {
-      expect(text.contains(banned), isFalse,
-          reason: 'forbidden dependency token "$banned" in pubspec.yaml');
+      expect(
+        text.contains(banned),
+        isFalse,
+        reason: 'forbidden dependency token "$banned" in pubspec.yaml',
+      );
     }
   });
 }

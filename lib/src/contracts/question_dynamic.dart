@@ -21,11 +21,14 @@
 ///    `answers` of this presentation in answer order (empty at step 0), and
 ///    the `earlier_presentations` of this branched question by this
 ///    participant, oldest first (empty in the first round).
-///  - top-level — invocation values from the host: `now` and a `seed` for
-///    host-provided randomness.
+///  - top-level — invocation values from the host: `now`, the `zone` of the
+///    run and a `seed` for host-provided randomness.
 ///
-/// There is no `study`, `settings` or `trigger` group and no `type_config`
-/// in contract version 1. Adding an optional field later is additive.
+/// Every timestamp (`now`, each `answered_at`) is local epoch seconds in the
+/// zone of the run (contract 2, docs/design/time-model.md).
+///
+/// There is no `study`, `settings` or `trigger` group and no `type_config`.
+/// Adding an optional field later is additive.
 ///
 /// The output is an optional `questions` list with one item for each question
 /// to change (`id`, and optional `text`, `options` and `key`) and an optional
@@ -42,7 +45,9 @@ import '../schema.dart';
 /// Contract revision (§4.5). Bump only on a breaking change.
 ///
 /// 1 (0.11.0): `question` / `step` / `signals` / invocation values.
-const int questionDynamicContractVersion = 1;
+/// 2 (0.13.0): every timestamp is local epoch seconds in the zone of the run;
+/// a top-level `zone` (required).
+const int questionDynamicContractVersion = 2;
 
 /// The global Lua function the runtime invokes:
 /// `dynamic_questions(input) -> output`.
@@ -53,10 +58,10 @@ const List<String> _memberRoles = ['root', 'follow_up'];
 
 /// One answer of a presentation: the same shape as in `question_follow_up`.
 TypeSpec _answer() => TypeSpec.object([
-      Field('question_id', TypeSpec.string()),
-      Field('values', TypeSpec.list(TypeSpec.string())),
-      Field('answered_at', TypeSpec.timestamp()),
-    ]);
+  Field('question_id', TypeSpec.string()),
+  Field('values', TypeSpec.list(TypeSpec.string())),
+  Field('answered_at', TypeSpec.timestamp()),
+]);
 
 /// The frozen `question_dynamic` contract descriptor.
 final ContractDescriptor questionDynamicContract = ContractDescriptor(
@@ -66,49 +71,82 @@ final ContractDescriptor questionDynamicContract = ContractDescriptor(
   input: Schema([
     // The branched question at the version that the participant gets. It is
     // the same for each participant.
-    Field('question', TypeSpec.object([
-      Field('id', TypeSpec.string()),
-      Field('root_question_id', TypeSpec.string()),
-      // All members at that version, ordered by position.
-      Field('questions', TypeSpec.list(TypeSpec.object([
+    Field(
+      'question',
+      TypeSpec.object([
         Field('id', TypeSpec.string()),
-        Field('role', TypeSpec.enumeration(_memberRoles)),
-        Field('type', TypeSpec.string()),
-        Field('tags', TypeSpec.list(TypeSpec.string())),
-        Field('position', TypeSpec.integer()),
-        Field('dynamic', TypeSpec.boolean()),
-        // The base text and the base options, ordered by position. The
-        // options list is empty for a type without options.
-        Field('text', TypeSpec.string()),
-        Field('options', TypeSpec.list(TypeSpec.object([
-          Field('label', TypeSpec.string()),
-          Field('value', TypeSpec.string()),
-          Field('position', TypeSpec.integer()),
-        ]))),
-      ]))),
-    ])),
+        Field('root_question_id', TypeSpec.string()),
+        // All members at that version, ordered by position.
+        Field(
+          'questions',
+          TypeSpec.list(
+            TypeSpec.object([
+              Field('id', TypeSpec.string()),
+              Field('role', TypeSpec.enumeration(_memberRoles)),
+              Field('type', TypeSpec.string()),
+              Field('tags', TypeSpec.list(TypeSpec.string())),
+              Field('position', TypeSpec.integer()),
+              Field('dynamic', TypeSpec.boolean()),
+              // The base text and the base options, ordered by position. The
+              // options list is empty for a type without options.
+              Field('text', TypeSpec.string()),
+              Field(
+                'options',
+                TypeSpec.list(
+                  TypeSpec.object([
+                    Field('label', TypeSpec.string()),
+                    Field('value', TypeSpec.string()),
+                    Field('position', TypeSpec.integer()),
+                  ]),
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ]),
+    ),
     // The step of the presentation that the host runs now.
-    Field('step', TypeSpec.object([
-      Field('index', TypeSpec.integer()),
-      Field('question_ids', TypeSpec.list(TypeSpec.string())),
-    ])),
+    Field(
+      'step',
+      TypeSpec.object([
+        Field('index', TypeSpec.integer()),
+        Field('question_ids', TypeSpec.list(TypeSpec.string())),
+      ]),
+    ),
     // Data about this participant.
-    Field('signals', TypeSpec.object([
-      Field('participant_id', TypeSpec.string(),
-          constraint: const Constraint(nonEmpty: true)),
-      // The answers of this presentation, in answer order. Empty at step 0.
-      // The values list is empty when the participant skipped the question.
-      Field('answers', TypeSpec.list(_answer())),
-      // The earlier presentations of this branched question by this
-      // participant, oldest first. Empty in the first round.
-      Field('earlier_presentations', TypeSpec.list(TypeSpec.object([
-        Field('schedule_entry_id', TypeSpec.string()),
-        Field('answered_at', TypeSpec.timestamp()),
+    Field(
+      'signals',
+      TypeSpec.object([
+        Field(
+          'participant_id',
+          TypeSpec.string(),
+          constraint: const Constraint(nonEmpty: true),
+        ),
+        // The answers of this presentation, in answer order. Empty at step 0.
+        // The values list is empty when the participant skipped the question.
         Field('answers', TypeSpec.list(_answer())),
-      ]))),
-    ])),
-    // Invocation values from the host.
+        // The earlier presentations of this branched question by this
+        // participant, oldest first. Empty in the first round.
+        Field(
+          'earlier_presentations',
+          TypeSpec.list(
+            TypeSpec.object([
+              Field('schedule_entry_id', TypeSpec.string()),
+              Field('answered_at', TypeSpec.timestamp()),
+              Field('answers', TypeSpec.list(_answer())),
+            ]),
+          ),
+        ),
+      ]),
+    ),
+    // Invocation values from the host: now (local epoch seconds in the zone
+    // of the run), the IANA zone of the run, and the seed.
     Field('now', TypeSpec.timestamp()),
+    Field(
+      'zone',
+      TypeSpec.string(),
+      constraint: const Constraint(nonEmpty: true),
+    ),
     Field('seed', TypeSpec.integer()),
   ]),
   output: Schema([
@@ -116,22 +154,26 @@ final ContractDescriptor questionDynamicContract = ContractDescriptor(
     // question of the step keeps its base content.
     Field(
       'questions',
-      TypeSpec.list(TypeSpec.object([
-        Field('id', TypeSpec.string()),
-        Field('text', TypeSpec.string(), required: false, nullable: true),
-        // The options to present, in order. No position: the host gives
-        // each option its index in the list.
-        Field(
-          'options',
-          TypeSpec.list(TypeSpec.object([
-            Field('label', TypeSpec.string()),
-            Field('value', TypeSpec.string()),
-          ])),
-          required: false,
-          nullable: true,
-        ),
-        Field('key', TypeSpec.string(), required: false, nullable: true),
-      ])),
+      TypeSpec.list(
+        TypeSpec.object([
+          Field('id', TypeSpec.string()),
+          Field('text', TypeSpec.string(), required: false, nullable: true),
+          // The options to present, in order. No position: the host gives
+          // each option its index in the list.
+          Field(
+            'options',
+            TypeSpec.list(
+              TypeSpec.object([
+                Field('label', TypeSpec.string()),
+                Field('value', TypeSpec.string()),
+              ]),
+            ),
+            required: false,
+            nullable: true,
+          ),
+          Field('key', TypeSpec.string(), required: false, nullable: true),
+        ]),
+      ),
       required: false,
       nullable: true,
     ),
