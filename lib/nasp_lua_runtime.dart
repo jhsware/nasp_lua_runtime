@@ -38,5 +38,6 @@ library;
 
 export 'src/contracts/contracts.dart';
 export 'src/errors.dart';
+export 'src/local_time.dart';
 export 'src/schema.dart';
 export 'src/vm.dart';
