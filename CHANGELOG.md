@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.14.0
+
+The round type of a self check-in: a round the participant starts on their
+own from the mobile app (`type: participant`, tag `participant`). `follow_up`
+now runs after such a round too, and both bundle kinds can tell it from a
+regular beep.
+
+**Added.**
+
+- `participant` in the round type of `follow_up`: `signals.current_round.type`,
+  `signals.recent_rounds[].type` and `signals.schedule[].type` accept `beep`,
+  `follow_up` and `participant`. An unknown type is still `inputInvalid` at
+  its field path.
+- An optional `trigger.type` on `question_selection`, with the same
+  enumeration. The host sets it; the tag stays the scheduling script's
+  choice. An unknown value is `inputInvalid` at `trigger.type`.
+- `roundTypes` and the constants `roundTypeBeep`, `roundTypeFollowUp`,
+  `roundTypeParticipant` (`lib/src/contracts/round_types.dart`, exported):
+  the one enumeration both contracts use.
+
+**Compatibility.** No contract version changes (`follow_up` and
+`question_selection` stay at 3). A host that sends neither value behaves as
+in 0.13.1. A script that treats every round that is not `beep` as a
+follow-up round must now handle `participant`. Move the server and the
+mobile app to the tag `v0.14.0` together; this also brings them the 0.13.1
+fix (both pin `v0.13.0` today).
+
 ## 0.13.1
 
 **Fixed.**
