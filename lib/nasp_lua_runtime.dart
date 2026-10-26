@@ -31,7 +31,10 @@
 ///    (study variables, with the `zone` of the run), `settings` (the
 ///    resolved script settings), `signals` (participant-specific data —
 ///    anything participant-specific is a signal) and top-level invocation
-///    values (`now`, `seed`, `trigger`).
+///    values (`now`, `seed`, `trigger`). The round type ([roundTypes]:
+///    `beep`, `follow_up`, `participant` for a self check-in) is set by the
+///    host: it is the optional `trigger.type` of `question_selection` and the
+///    `type` of every round and schedule entry of `follow_up`.
 ///    The `question_follow_up` kind (contract v2, never a bundle part; see
 ///    [ScriptKind.bundleParts]) has the group `question` (the branched
 ///    question and its members), `signals`, `now`, `zone` and `seed`.
