@@ -36,7 +36,9 @@ DST rules. The authority is `nasp_waves_server/docs/design/time-model.md`.
   `add_days`, `add_seconds`.
 - The explicit **schema type + validator** (path-qualified errors) and total,
   lossless **Dart↔Lua marshalling** (timestamps ↔ epoch seconds, int/double
-  preserved). `Field` carries three advisory slots for bundle-declared
+  preserved). A `timestamp` value is an integer, a double, or an ISO-8601
+  string with `Z`; a string with an offset or without a zone is refused
+  (0.13.1). `Field` carries three advisory slots for bundle-declared
   settings schemas, all ignored by the validator: `description` (prose),
   `from_question` (the enrolment question whose answer seeds the field, read
   by the server's settings derivation), and `format` (a display hint for a
@@ -250,13 +252,13 @@ dependencies:
   nasp_lua_runtime:
     git:
       url: <this repository>
-      ref: v0.13.0
+      ref: v0.13.1
 ```
 
-A host that moves to 0.13.0 must convert every timestamp with
+A host that moves to 0.13.0 or later must convert every timestamp with
 `LocalTimeCodec` and fill the `zone` of the run (see the `## 0.13.0` entry
-of `CHANGELOG.md`). The server and the phone pin the same tag, so they use
-the same tz data.
+of `CHANGELOG.md`). A timestamp string must end with `Z` (0.13.1). The
+server and the phone pin the same tag, so they use the same tz data.
 
 The conformance test suite (`dart test`) is the acceptance gate for any future
 engine swap: same fixtures, same inputs, identical outputs.

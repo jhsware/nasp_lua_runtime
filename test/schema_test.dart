@@ -66,6 +66,124 @@ void main() {
       );
     });
 
+    group('the form of a local timestamp (time-model.md §3.1)', () {
+      Map<String, Object?> withWhen(Object? when) => valid()..['when'] = when;
+
+      Matcher refused(ScriptErrorType type, String message) => throwsA(
+        isA<ScriptError>()
+            .having((e) => e.type, 'type', type)
+            .having((e) => e.path, 'path', 'when')
+            .having((e) => e.message, 'message', message),
+      );
+
+      test('a string with Z keeps its fields as the wall-clock time', () {
+        final out = schema.validate(
+          withWhen('2026-10-25T07:00:00.000Z'),
+          part: ScriptKind.scheduling,
+          input: true,
+        );
+        final when = out['when'] as DateTime;
+        expect(when.isUtc, isTrue);
+        expect(when.millisecondsSinceEpoch ~/ 1000, 1792911600);
+      });
+
+      test('a lowercase z is accepted', () {
+        final out = schema.validate(
+          withWhen('2026-10-25T07:00:00z'),
+          part: ScriptKind.scheduling,
+          input: true,
+        );
+        expect(
+          (out['when'] as DateTime).millisecondsSinceEpoch ~/ 1000,
+          1792911600,
+        );
+      });
+
+      test('a string with an offset is refused', () {
+        expect(
+          () => schema.validate(
+            withWhen('2026-10-25T07:00:00.000+02:00'),
+            part: ScriptKind.scheduling,
+            input: true,
+          ),
+          refused(
+            ScriptErrorType.inputInvalid,
+            'expected timestamp (ISO-8601 with Z)',
+          ),
+        );
+      });
+
+      test('a string with a zero offset is refused', () {
+        expect(
+          () => schema.validate(
+            withWhen('2026-10-25T07:00:00+00:00'),
+            part: ScriptKind.scheduling,
+            input: true,
+          ),
+          refused(
+            ScriptErrorType.inputInvalid,
+            'expected timestamp (ISO-8601 with Z)',
+          ),
+        );
+      });
+
+      test('a string without a zone is refused', () {
+        expect(
+          () => schema.validate(
+            withWhen('2026-10-25T07:00:00.000'),
+            part: ScriptKind.scheduling,
+            input: true,
+          ),
+          refused(
+            ScriptErrorType.inputInvalid,
+            'expected timestamp (ISO-8601 with Z)',
+          ),
+        );
+      });
+
+      test('a string that does not parse keeps its message', () {
+        expect(
+          () => schema.validate(
+            withWhen('not-a-date'),
+            part: ScriptKind.scheduling,
+            input: true,
+          ),
+          refused(
+            ScriptErrorType.inputInvalid,
+            'expected timestamp (ISO-8601)',
+          ),
+        );
+      });
+
+      test('on the output side the error is outputInvalid', () {
+        expect(
+          () => schema.validate(
+            withWhen('2026-10-25T07:00:00.000+02:00'),
+            part: ScriptKind.scheduling,
+            input: false,
+          ),
+          refused(
+            ScriptErrorType.outputInvalid,
+            'expected timestamp (ISO-8601 with Z)',
+          ),
+        );
+      });
+
+      test('an integer and a double are local epoch seconds', () {
+        for (final Object seconds in <Object>[1792911600, 1792911600.0]) {
+          final out = schema.validate(
+            withWhen(seconds),
+            part: ScriptKind.scheduling,
+            input: true,
+          );
+          final when = out['when'] as DateTime;
+          expect(when.isUtc, isTrue);
+          expect(when.hour, 7);
+          expect(when.millisecondsSinceEpoch ~/ 1000, 1792911600);
+        }
+      });
+    });
+
     test('missing required field is inputInvalid', () {
       final bad = valid()..remove('name');
       expect(

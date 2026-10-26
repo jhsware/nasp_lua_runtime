@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.13.1
+
+**Fixed.**
+
+- The validator refuses a `timestamp` string with an offset or without a
+  zone (`lib/src/schema.dart`). A local timestamp in JSON is an ISO-8601
+  string with `Z` whose fields are the wall-clock time
+  (`docs/design/time-model.md` §3.1). Before 0.13.1 the parser moved a
+  string with an offset to UTC, and read a string without a zone in the zone
+  of the host process. Both gave a wrong local time and no error. Now the
+  error is `inputInvalid` (or `outputInvalid`) with the field path and the
+  message `expected timestamp (ISO-8601 with Z)`. A string that does not
+  parse keeps the message `expected timestamp (ISO-8601)`. An integer and a
+  double are accepted as before.
+- Doc comments: the example value in `lib/src/local_time.dart` is
+  `1792911600` (was `1793775600`, which is 2026-11-04 07:00); a duplicate
+  line in `lib/src/contracts/scheduling.dart` is removed.
+
+**Compatibility.** No contract version changes. The two hosts send
+`isoUtc(LocalTimeCodec.toLocal(instant, zone))`, which ends with `Z`, so a
+host of 0.13.0 needs no change. Move the server and the mobile app to the
+tag `v0.13.1` together, before their releases.
+
 ## 0.13.0
 
 Local time in the scripts (`docs/design/time-model.md`; the authority is

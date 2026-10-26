@@ -1,9 +1,11 @@
 # nasp_lua_runtime — Time model: local time in the scripts
 
-> **Version:** 1.0
-> **Date:** 2026-10-24
-> **Status:** Describes the code as built (runtime 0.13.0, tag `v0.13.0`).
+> **Version:** 1.1
+> **Date:** 2026-10-26
+> **Status:** Describes the code as built (runtime 0.13.1, tag `v0.13.1`).
 > Version 0.1 was the design; §8 records each difference from it.
+> **Changed in 1.1:** the validator refuses a timestamp string with an
+> offset or without a zone (§3.1, §6).
 > **Authority:** `nasp_waves_server/docs/design/time-model.md` (the time
 > model of the four repositories). This document describes the part that
 > lives in this package.
@@ -70,8 +72,17 @@ runtime tag: both hosts that pin the same runtime tag resolve identically.
 
 The JSON form of a local timestamp is an ISO-8601 string with `Z` whose
 fields are the wall-clock time (`2026-10-25T07:00:00.000Z` means 07:00 on
-the clock of the run). The schema's `timestamp` parser already reads this
-form. A host writes it with `isoUtc(LocalTimeCodec.toLocal(instant, zone))`.
+the clock of the run). The schema's `timestamp` parser reads this form. A
+host writes it with `isoUtc(LocalTimeCodec.toLocal(instant, zone))`.
+
+Since 0.13.1 the parser refuses a string with an offset (`+02:00`, also
+`+00:00`) or without a zone, with the message `expected timestamp (ISO-8601
+with Z)` and the field path (`inputInvalid` on the input, `outputInvalid` on
+the output). `DateTime.parse` moves a string with an offset to UTC, and
+reads a string without a zone in the zone of the host process. Both give a
+wrong local time. A lowercase `z` is accepted. A string that does not parse
+keeps the message `expected timestamp (ISO-8601)`. The tests are in
+`test/schema_test.dart` (group "the form of a local timestamp").
 
 ### 3.2 The host helpers
 
@@ -203,7 +214,8 @@ and the two 2026 changes (2026-03-29 02:00 → 03:00 at 01:00Z; 2026-10-25
 - `marshal.dart`: a `DateTime` is pushed as its epoch seconds; a Lua number
   is read as epoch seconds into a `DateTime` with `isUtc` true.
 - The sandbox seal, the string guards, the budget.
-- The validator: `timestamp` accepts an ISO string, an integer or a double.
+- The validator: `timestamp` accepts an integer, a double or an ISO-8601
+  string. Since 0.13.1 the string must end with `Z` (§3.1).
 - The `seed` rules.
 
 ## 7. Migration of a v2 script
