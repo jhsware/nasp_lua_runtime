@@ -14,8 +14,11 @@
 ///    participant's identity (`participant_id`) and the recent `answers`
 ///    (ids + timestamps only); later device telemetry such as location and
 ///    usage (additive). Anything participant-specific is a signal.
-///  - top-level — invocation values from the host: the `trigger` (time and
-///    tag) and a `seed` for host-provided randomness.
+///  - top-level — invocation values from the host: the `trigger` (time, tag
+///    and type) and a `seed` for host-provided randomness. The tag is chosen
+///    by the scheduling script; the type is the round type set by the host:
+///    `beep`, `follow_up`, or `participant` for a round the participant
+///    started on their own (a self check-in). The type is optional.
 ///
 /// Every timestamp is local epoch seconds in the zone of the run (contract
 /// v3, docs/design/time-model.md).
@@ -26,6 +29,7 @@ library;
 
 import '../errors.dart';
 import '../schema.dart';
+import 'round_types.dart';
 import 'scheduling.dart' show resolvedSettingsSpec;
 
 /// Contract revision (§4.5). Bump only on a breaking change.
@@ -34,6 +38,7 @@ import 'scheduling.dart' show resolvedSettingsSpec;
 /// values; `answer_history` became `signals.answers`.
 /// 3 (0.13.0): every timestamp is local epoch seconds in the zone of the run;
 /// `study.zone` added (required).
+/// 0.14.0 added the optional `trigger.type` (additive, still 3).
 const int questionSelectionContractVersion = 3;
 
 /// The global Lua function the runtime invokes:
@@ -122,12 +127,21 @@ final ContractDescriptor questionSelectionContract = ContractDescriptor(
       ]),
     ),
     // Invocation values from the host. trigger.time is local epoch seconds
-    // in the zone of the run.
+    // in the zone of the run. trigger.tag is chosen by the scheduling script;
+    // trigger.type is the round type set by the host (roundTypes: `beep`,
+    // `follow_up`, or `participant` for a self check-in). Optional: a host
+    // older than 0.14.0 sends no type.
     Field(
       'trigger',
       TypeSpec.object([
         Field('time', TypeSpec.timestamp()),
         Field('tag', TypeSpec.string(), required: false, nullable: true),
+        Field(
+          'type',
+          TypeSpec.enumeration(roundTypes),
+          required: false,
+          nullable: true,
+        ),
       ]),
     ),
     Field('seed', TypeSpec.integer()),
