@@ -16,6 +16,7 @@ export 'follow_up.dart';
 export 'question_dynamic.dart';
 export 'question_follow_up.dart';
 export 'question_selection.dart';
+export 'round_types.dart';
 export 'scheduling.dart';
 
 /// All contract descriptors, keyed by [ScriptKind].
