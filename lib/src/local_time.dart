@@ -2,7 +2,7 @@
 ///
 /// Every `timestamp` of every contract is **local epoch seconds** in the zone
 /// of the run: a wall-clock time encoded as the epoch seconds of that
-/// wall-clock time read as if it were UTC (`2026-10-25 07:00` is `1793775600`
+/// wall-clock time read as if it were UTC (`2026-10-25 07:00` is `1792911600`
 /// in any zone). The host converts an instant to local time before a run and
 /// converts a local time back to an instant after a run. Both hosts use this
 /// class, so the conversion is the same on the server and on the phone.

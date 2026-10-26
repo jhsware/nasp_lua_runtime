@@ -746,10 +746,22 @@ class _Validator {
     }
   }
 
+  /// A timestamp is local epoch seconds in the zone of the run
+  /// (docs/design/time-model.md §2, §3.1): an integer or a double, or an
+  /// ISO-8601 string with `Z` whose fields are the wall-clock time
+  /// (`2026-10-25T07:00:00.000Z` is 07:00 on the clock of the run).
+  ///
+  /// A string with an offset (`+02:00`) or without a zone is refused. With
+  /// an offset, the parser moves the fields to UTC. Without a zone, the
+  /// parser reads the fields in the zone of the host process. Both give a
+  /// wrong local time.
   DateTime _timestamp(Object? json, String path) {
     if (json is String) {
       final dt = DateTime.tryParse(json);
       if (dt == null) _fail(path, 'expected timestamp (ISO-8601)');
+      if (!_endsWithZ(json)) {
+        _fail(path, 'expected timestamp (ISO-8601 with Z)');
+      }
       return dt.toUtc();
     }
     if (json is int) {
@@ -763,6 +775,10 @@ class _Validator {
     }
     _fail(path, 'expected timestamp');
   }
+
+  /// True when [text] ends with the UTC designator `Z` (or `z`).
+  static bool _endsWithZ(String text) =>
+      text.endsWith('Z') || text.endsWith('z');
 
   Map<String, Object?> _object(List<Field> fields, Object? json, String path) {
     if (json is! Map) _fail(path, 'expected object');

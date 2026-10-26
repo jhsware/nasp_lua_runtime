@@ -64,7 +64,6 @@ TypeSpec resolvedSettingsSpec() => TypeSpec.object([
 ]);
 
 /// The frozen `scheduling` contract descriptor.
-/// The frozen `scheduling` contract descriptor.
 ///
 /// Every timestamp of the input and of the output is local epoch seconds in
 /// the zone of the run (`study.zone`; `time-model.md` R5): `window.start`,
