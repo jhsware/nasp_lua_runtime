@@ -12,6 +12,7 @@
 **Compatibility.** A documentation clarification only. No field, type,
 validation or contract version changes (`scheduling` stays at 3). The hosts
 need no new pin.
+
 ## 0.14.0
 
 The round type of a self check-in: a round the participant starts on their
