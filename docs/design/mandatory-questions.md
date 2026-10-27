@@ -1,15 +1,13 @@
 # nasp_lua_runtime — Mandatory and optional questions in the contracts
 
-> **Version:** 0.2
+> **Version:** 0.3
 > **Date:** 2026-10-27
 > **Status:** Design. Nothing is built. The work is runtime 0.15.0; when it
-> is built, a §"Differences from 0.2" records each change from this version.
-> **Changed in 0.2 (2026-10-27):** no `skipped` field on any answer (a
-> skip is an empty `values` list, as today; server D7); the declaration is
-> the global `requires_root_answer = true` (server D8); `follow_up` does
-> not change.
+> is built, a §"Differences from 0.3" records each change from this version.
+> **Changed in 0.3 (2026-10-27):** the server's D1 to D6 and D10 are
+> confirmed; the design does not change (§9 lists the 0.2 changes).
 > **Authority:** `nasp_waves_server/docs/design/mandatory-questions.md`
-> (0.2, the design of the four repositories). This document describes the
+> (0.3, the design of the four repositories). This document describes the
 > part that lives in this package: the contract fields, the declaration of
 > a branching script, the version and the tests. "server §n" is a section
 > of the authority.
@@ -179,3 +177,4 @@ every contract. `run` and `compile` keep their signatures.
 |---|---|---|
 | 0.1 | 2026-10-27 | The first design. |
 | 0.2 | 2026-10-27 | Server D7: the `skipped` fields removed from every answer shape (§2, §3); `follow_up` unchanged; the shared answer object of 0.1 §3.3 dropped with them. Server D8: the declaration is the global `requires_root_answer` (§4); the error message follows. |
+| 0.3 | 2026-10-27 | Server 0.3: Sebastian confirmed D1 to D6 and D10. No change to the design. |
