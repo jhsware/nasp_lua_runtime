@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+**Documentation.**
+
+- Doc comments in `lib/src/contracts/scheduling.dart`: `signals.enrolment_date`
+  is the moment the participant enrolled, a local time with a clock time, not
+  midnight of a date. A script can schedule relative to it, for example
+  `add_seconds(input.signals.enrolment_date, 300)`.
+
+**Compatibility.** A documentation clarification only. No field, type,
+validation or contract version changes (`scheduling` stays at 3). The hosts
+need no new pin.
 ## 0.14.0
 
 The round type of a self check-in: a round the participant starts on their
