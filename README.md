@@ -152,7 +152,11 @@ Per kind:
   seeded with 0. Output `triggers[] {trigger_at, tag?}`, `regenerate_after?`.
 - `question_selection` — `select_questions(input)` (contract 3): `study
   {zone, question_sets, questions}`, `settings?`, `signals {participant_id,
-  answers}`, `trigger`, `seed`.
+  answers}`, `trigger`, `seed`. Each catalog question has an optional
+  `mandatory` (0.15.0): its effective setting. Output `items[] {id, kind,
+  mandatory?}` and `reason?`; `mandatory = true` makes the item mandatory in
+  this round (a question, every member of a set, or the root of a branched
+  question).
 - `follow_up` — `follow_up(input)` (contract 3): `study {zone}`, `settings?`,
   `signals {participant_id, current_round, recent_rounds, schedule}`, `now`,
   `seed`. Output `follow_up?`: `{trigger_at, tag}` (a clock time) or
@@ -164,19 +168,29 @@ Per kind:
   {participant_id, answers}`, `now`, `zone`, `seed`. The script of a
   branched question. It is not a bundle part (see `ScriptKind.bundleParts`).
   The `question` group holds the branched question and its members; it is
-  the same for each participant. Each answer carries its `values`. The output
-  is `questions` (a list of `{id}`) and `reason`, both optional.
+  the same for each participant. Each member has an optional `mandatory`
+  (0.15.0): its effective setting. Each answer carries its `values`; a
+  skipped question, the root too when it is optional, has an empty list.
+  The output is `questions` (a list of `{id, mandatory?}`;
+  `mandatory = true` makes that follow-up question mandatory in this
+  presentation) and `reason`, both optional. A script can declare
+  `requires_root_answer` (see [Script declarations](#script-declarations)).
 - `question_dynamic` — `dynamic_questions(input)` (0.11.0; contract 2 since
   0.13.0): `question {id, root_question_id, questions}` (each member also
-  has `dynamic`, the base `text` and the base `options` `{label, value,
-  position}`), `step {index, question_ids}`, `signals {participant_id,
-  answers, earlier_presentations}` (each earlier presentation has
+  has `dynamic`, the base `text`, the base `options` `{label, value,
+  position}` and an optional `mandatory` (0.15.0)), `step {index,
+  question_ids}`, `signals {participant_id, answers,
+  earlier_presentations}` (each earlier presentation has
   `schedule_entry_id`, `answered_at` and `answers`), `now`, `zone`, `seed`.
   The dynamic questions script of a branched question. It is not a bundle
   part. The output is `questions` (a list of `{id, text?, options?, key?}`;
   an option is `{label, value}` with no position) and `reason`, both
   optional. The output has no `type` or `type_config` field: the validator
   drops an undeclared key.
+
+Each `mandatory` is an optional, nullable boolean; the runtime enforces
+nothing. A nullable output field that the script leaves nil comes back as
+`null`, so an item without `mandatory` has `mandatory: null`.
 
 A v1-shaped (flat) bundle input, or a v2 input without `zone`, is rejected
 with a path-qualified `inputInvalid` error. The prose documentation of every
@@ -242,6 +256,34 @@ through `string.find(...)` and through `s:find(...)`, in `compile` and in
 `run`. The tests are in `test/string_guards_test.dart`; the rule for script
 authors is in `nasp_waves_server/docs/design/scripting.md` §6.2.
 
+## Script declarations
+
+Since 0.15.0 a branching script (`question_follow_up`) that needs a value
+for the root question declares it with one global boolean at the top level
+of the chunk:
+
+```lua
+requires_root_answer = true
+
+function follow_up_questions(input)
+  -- input.signals.answers[1] is the root answer; with an optional root
+  -- its values list can be empty (a skip).
+  return {}
+end
+```
+
+The host reads it with the synchronous
+`LuaScriptRuntime.declarations(kind, source)`, which returns a
+`ScriptDeclarationsResult` with `error` and `declarations`
+(`ScriptDeclarations.requiresRootAnswer`; `toJson()` gives
+`{'requires_root_answer': bool}`). It runs the checks of `compile` first
+and returns their error. An absent or nil global is `false`; a value that
+is not a boolean is a `compile` error `requires_root_answer must be a
+boolean`. For every other kind the global is not read and the result is
+`false`. The runtime does not enforce the declaration and `run` never
+reads it: the server compares it with the effective setting of the root
+and warns (`nasp_waves_server/docs/design/mandatory-questions.md` §8).
+
 ## Consuming
 
 Depend on this package via a `git:` dependency **pinned to a tag/commit** so
@@ -252,7 +294,7 @@ dependencies:
   nasp_lua_runtime:
     git:
       url: <this repository>
-      ref: v0.13.1
+      ref: v0.15.0
 ```
 
 A host that moves to 0.13.0 or later must convert every timestamp with

@@ -1,6 +1,40 @@
 # Changelog
 
-## Unreleased
+## 0.15.0
+
+Mandatory and optional questions: a question is optional by default, and
+the operator, a study rule or a script can make it mandatory. The scripts
+see the setting of each question, two scripts can raise it, and a
+branching script can declare that it needs a value for the root question
+(`docs/design/mandatory-questions.md`, and the authority
+`nasp_waves_server/docs/design/mandatory-questions.md`). A skipped answer
+is an empty `values` list, as before. The runtime enforces nothing.
+
+**Added.**
+
+- An optional, nullable boolean `mandatory`, last in its object:
+  - `question_selection` input `study.questions[].mandatory`: the effective
+    setting of the catalog question.
+  - `question_selection` output `items[].mandatory`: `true` makes the item
+    mandatory in this round.
+  - `question_follow_up` input `question.questions[].mandatory`: the
+    effective setting of the member.
+  - `question_follow_up` output `questions[].mandatory`: `true` makes that
+    follow-up question mandatory in this presentation.
+  - `question_dynamic` input `question.questions[].mandatory`: the
+    effective setting of the member.
+
+  A value that is not a boolean is `inputInvalid` / `outputInvalid` at its
+  path. An output item that leaves the field nil comes back with
+  `mandatory: null`, the rule of every nullable output field.
+- `LuaScriptRuntime.declarations(kind, source)`, synchronous, returns a
+  `ScriptDeclarationsResult` (`error`, `declarations`). It runs the checks
+  of `compile` and, for `question_follow_up` only, reads the global
+  `requires_root_answer` into `ScriptDeclarations.requiresRootAnswer`
+  (`toJson()` gives `{'requires_root_answer': bool}`). Absent or nil is
+  `false`; a value that is not a boolean is a `compile` error
+  "requires_root_answer must be a boolean". `compile` and `run` do not
+  change.
 
 **Documentation.**
 
@@ -9,9 +43,9 @@
   midnight of a date. A script can schedule relative to it, for example
   `add_seconds(input.signals.enrolment_date, 300)`.
 
-**Compatibility.** A documentation clarification only. No field, type,
-validation or contract version changes (`scheduling` stays at 3). The hosts
-need no new pin.
+**Compatibility.** No contract version changes: the bundle kinds stay at 3,
+the branch kinds at 2. A script written for 0.14.0 runs unchanged. Move the
+server and the mobile app to the tag `v0.15.0` together.
 
 ## 0.14.0
 
