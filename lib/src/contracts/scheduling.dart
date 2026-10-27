@@ -12,8 +12,11 @@
 ///    `nasp_scheduling` domain versions (its `rule` is opaque JSON). A
 ///    participant-scope override wins over the study-scope settings.
 ///  - `signals` — participant-specific data the script analyses. Today the
-///    participant's identity (`participant_id`) and `enrolment_date`; later
-///    device telemetry such as location and usage (additive). Anything
+///    participant's identity (`participant_id`) and `enrolment_date`, the
+///    moment the participant enrolled (a local time with a clock time, not
+///    midnight of a date; a script can schedule relative to it, for example
+///    `add_seconds(input.signals.enrolment_date, 300)`); later device
+///    telemetry such as location and usage (additive). Anything
 ///    participant-specific is a signal.
 ///  - top-level — invocation values from the host: the wall-clock `now` and
 ///    an optional `seed` for host-provided randomness.
@@ -122,7 +125,8 @@ final ContractDescriptor schedulingContract = ContractDescriptor(
           TypeSpec.string(),
           constraint: const Constraint(nonEmpty: true),
         ),
-        // Local epoch seconds in the zone of the run.
+        // The moment of enrolment, with its clock time. Local epoch seconds
+        // in the zone of the run.
         Field('enrolment_date', TypeSpec.timestamp()),
       ]),
     ),
