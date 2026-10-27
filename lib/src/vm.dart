@@ -20,6 +20,8 @@ import 'marshal.dart';
 import 'output_rules.dart';
 import 'string_guards.dart';
 
+part 'vm_support.dart';
+
 /// Per-invocation execution budget (§6.3). Budgets apply per part invocation.
 ///
 /// Note on the instruction/step budget: the underlying pure-Dart engine does
@@ -82,6 +84,43 @@ class ScriptRunResult {
   bool get ok => error == null;
 }
 
+/// The declarations of a script: top-level globals that tell the host
+/// something about the script itself (docs/design/mandatory-questions.md
+/// §4). The runtime reads them with [LuaScriptRuntime.declarations]; it does
+/// not enforce them, and [LuaScriptRuntime.run] never reads them.
+class ScriptDeclarations {
+  const ScriptDeclarations({this.requiresRootAnswer = false});
+
+  /// The global `requires_root_answer` of a `question_follow_up` script:
+  /// true when the branching script needs a value for the root question,
+  /// so that a skipped root would leave it without a decision
+  /// (nasp_waves_server docs/design/mandatory-questions.md §8). The server
+  /// compares it with the effective setting of the root and warns. False
+  /// when the global is absent or nil, and for every other kind.
+  final bool requiresRootAnswer;
+
+  /// The wire shape: `{'requires_root_answer': bool}`.
+  Map<String, Object?> toJson() => {'requires_root_answer': requiresRootAnswer};
+}
+
+/// The outcome of [LuaScriptRuntime.declarations]: the [declarations] of the
+/// script, or an [error] with the default declarations.
+class ScriptDeclarationsResult {
+  const ScriptDeclarationsResult({
+    this.error,
+    this.declarations = const ScriptDeclarations(),
+  });
+
+  /// The failure (the error of [LuaScriptRuntime.compile], or a declaration
+  /// of the wrong type), or null on success.
+  final ScriptError? error;
+
+  /// The declarations; the defaults when [error] is set.
+  final ScriptDeclarations declarations;
+
+  bool get ok => error == null;
+}
+
 /// Internal sentinel used to unwind out of the interpreter when a budget is
 /// exceeded from within a host function.
 class _BudgetExceeded implements Exception {
@@ -100,7 +139,7 @@ class LuaScriptRuntime {
   /// bundle's `runtime_min_version` against this constant to decide whether it
   /// can execute the bundle. `test/version_test.dart` guards the two against
   /// drift.
-  static const String version = '0.14.0';
+  static const String version = '0.15.0';
 
   /// Execute one [kind] part.
   ///
@@ -305,13 +344,64 @@ class LuaScriptRuntime {
   /// sandbox and verifies the kind's entry point is defined. Returns null on
   /// success, or a [ScriptError] (compile / runtime / contractUnsupported).
   /// Backs the REST `/validate` surface and pre-simulation checks.
-  ScriptError? compile(ScriptKind kind, String source) {
+  ScriptError? compile(ScriptKind kind, String source) =>
+      _loadChecked(kind, source).error;
+
+  /// Read the [ScriptDeclarations] of a [kind] script (synchronous, like
+  /// [compile] and [run]).
+  ///
+  /// It runs the checks of [compile] first, in the same sandbox, and returns
+  /// their error with the default declarations. Then, for
+  /// [ScriptKind.questionFollowUp] only, it reads the global
+  /// `requires_root_answer`: absent or nil is false, a boolean is its value,
+  /// any other value is a [ScriptErrorType.compile] error. For each other
+  /// kind it does not read the global and returns the defaults, so that an
+  /// unrelated script with a global of that name does not fail.
+  ScriptDeclarationsResult declarations(ScriptKind kind, String source) {
+    final loaded = _loadChecked(kind, source);
+    final error = loaded.error;
+    if (error != null) return ScriptDeclarationsResult(error: error);
+    if (kind != ScriptKind.questionFollowUp) {
+      return const ScriptDeclarationsResult();
+    }
+    final ls = loaded.state!;
+    ls.getGlobal(_requiresRootAnswer);
+    if (ls.isNil(-1)) return const ScriptDeclarationsResult();
+    if (!ls.isBoolean(-1)) {
+      return ScriptDeclarationsResult(
+        error: ScriptError(
+          type: ScriptErrorType.compile,
+          part: kind,
+          message: '$_requiresRootAnswer must be a boolean',
+        ),
+      );
+    }
+    return ScriptDeclarationsResult(
+      declarations: ScriptDeclarations(requiresRootAnswer: ls.toBoolean(-1)),
+    );
+  }
+
+  /// The checks of [compile], shared with [declarations] so that the two
+  /// cannot drift: the sandbox with the stub `now`, `random` and `log` and
+  /// the real local-time helpers, `loadString`, the top-level chunk and the
+  /// entry-point check. Returns the first error, or the loaded state.
+  ({ScriptError? error, LuaState? state}) _loadChecked(
+    ScriptKind kind,
+    String source,
+  ) {
+    ({ScriptError? error, LuaState? state}) fail(
+      ScriptErrorType type,
+      String message,
+    ) => (
+      error: ScriptError(type: type, part: kind, message: message),
+      state: null,
+    );
+
     final contract = contractFor(kind);
     if (contract == null) {
-      return ScriptError(
-        type: ScriptErrorType.contractUnsupported,
-        part: kind,
-        message: 'no contract registered for kind ${kind.id}',
+      return fail(
+        ScriptErrorType.contractUnsupported,
+        'no contract registered for kind ${kind.id}',
       );
     }
     final ls = LuaState.newState();
@@ -325,99 +415,36 @@ class LuaScriptRuntime {
     registerHostHelpers(ls, onHostCall: () {});
     try {
       if (ls.loadString(source) != ThreadStatus.luaOk) {
-        return ScriptError(
-          type: ScriptErrorType.compile,
-          part: kind,
-          message: ls.toStr(-1) ?? 'compile error',
-        );
+        return fail(ScriptErrorType.compile, ls.toStr(-1) ?? 'compile error');
       }
     } catch (e) {
-      return ScriptError(
-        type: ScriptErrorType.compile,
-        part: kind,
-        message: _luaMessage(e),
-      );
+      return fail(ScriptErrorType.compile, _luaMessage(e));
     }
     try {
       if (ls.pCall(0, 0, 0) != ThreadStatus.luaOk) {
-        return ScriptError(
-          type: ScriptErrorType.runtime,
-          part: kind,
-          message: _withHints(ls.toStr(-1) ?? 'runtime error'),
+        return fail(
+          ScriptErrorType.runtime,
+          _withHints(ls.toStr(-1) ?? 'runtime error'),
         );
       }
     } catch (e) {
-      return ScriptError(
-        type: ScriptErrorType.runtime,
-        part: kind,
-        message: _luaMessage(e),
-      );
+      return fail(ScriptErrorType.runtime, _luaMessage(e));
     }
     ls.getGlobal(contract.entrypoint);
     if (!ls.isFunction(-1)) {
-      return ScriptError(
-        type: ScriptErrorType.runtime,
-        part: kind,
-        message: "entry point '${contract.entrypoint}' is not defined",
+      return fail(
+        ScriptErrorType.runtime,
+        "entry point '${contract.entrypoint}' is not defined",
       );
     }
-    return null;
-  }
-
-  /// Strip every ambient capability that is not part of the sanctioned set
-  /// (§6.2): no `io`/`os`/`package`/`require`/`dofile`/`loadfile`/`load`/
-  /// `debug`/`print`, and no nondeterministic `math.random`. What remains is
-  /// base + `math` + `string` + `table` (plus injected `now`/`random`/`log`
-  /// and the local-time helpers of `host_helpers.dart`).
-  /// The string functions that would use a Lua pattern are wrapped so that
-  /// they raise a clear error (`string_guards.dart`).
-  void _sealSandbox(LuaState ls) {
-    const dangerous = <String>[
-      'io',
-      'os',
-      'package',
-      'require',
-      'dofile',
-      'loadfile',
-      'load',
-      'loadstring',
-      'collectgarbage',
-      'debug',
-      'print',
-    ];
-    for (final name in dangerous) {
-      ls.pushNil();
-      ls.setGlobal(name);
-    }
-    ls.getGlobal('math');
-    if (ls.isTable(-1)) {
-      ls.pushNil();
-      ls.setField(-2, 'random');
-      ls.pushNil();
-      ls.setField(-2, 'randomseed');
-    }
     ls.pop(1);
-    installStringGuards(ls);
+    return (error: null, state: ls);
   }
 }
 
-/// Extract a concise message from a Lua/engine error object.
-String _luaMessage(Object e) {
-  final s = e.toString();
-  const prefix = 'Exception: ';
-  return _withHints(s.startsWith(prefix) ? s.substring(prefix.length) : s);
-}
-
-/// Append a hint to an engine error message that a script author cannot act
-/// on without one. `#s` on a string is an error in this engine (the length
-/// operator works only on tables); the hint names `s:len()`.
-String _withHints(String message) {
-  const lengthOfString = 'attempt to get length of a string value';
-  if (message.contains(lengthOfString) && !message.contains('s:len()')) {
-    return '$message; use s:len() for the length of a string';
-  }
-  return message;
-}
+/// The global of a branching script that declares that it needs a value for
+/// the root question (docs/design/mandatory-questions.md §4).
+const String _requiresRootAnswer = 'requires_root_answer';
 
 /// Convert a typed script value (as returned on [ScriptRunResult.output]) into
 /// a JSON-encodable value: [DateTime] becomes an ISO-8601 UTC string, maps and

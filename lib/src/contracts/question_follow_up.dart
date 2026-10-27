@@ -30,9 +30,10 @@
 ///
 /// As for the `follow_up` kind, this input carries answer *values*: the
 /// script cannot decide without them. A skipped question has an empty
-/// `values` list. The output contains only question ids: an optional,
-/// ordered `questions` list and an optional `reason`. An absent, null or
-/// empty `questions` list means "the presentation is complete".
+/// `values` list. The root entry `answers[1]` can be a skipped question when
+/// the root is optional. The output contains only question ids: an
+/// optional, ordered `questions` list and an optional `reason`. An absent,
+/// null or empty `questions` list means "the presentation is complete".
 library;
 
 import '../errors.dart';
@@ -43,6 +44,8 @@ import '../schema.dart';
 /// 1 (0.10.0): `question` / `signals` / invocation values.
 /// 2 (0.13.0): every timestamp is local epoch seconds in the zone of the run;
 /// a top-level `zone` (required).
+/// 0.15.0 added the optional `mandatory` on the members and on the output
+/// questions (additive, still 2).
 const int questionFollowUpContractVersion = 2;
 
 /// The global Lua function the runtime invokes:
@@ -75,6 +78,14 @@ final ContractDescriptor questionFollowUpContract = ContractDescriptor(
               Field('type', TypeSpec.string()),
               Field('tags', TypeSpec.list(TypeSpec.string())),
               Field('position', TypeSpec.integer()),
+              // The effective setting of the member. Absent from a host
+              // older than 0.15.0.
+              Field(
+                'mandatory',
+                TypeSpec.boolean(),
+                required: false,
+                nullable: true,
+              ),
             ]),
           ),
         ),
@@ -119,7 +130,19 @@ final ContractDescriptor questionFollowUpContract = ContractDescriptor(
     // empty => the presentation is complete.
     Field(
       'questions',
-      TypeSpec.list(TypeSpec.object([Field('id', TypeSpec.string())])),
+      TypeSpec.list(
+        TypeSpec.object([
+          Field('id', TypeSpec.string()),
+          // true makes this follow-up question mandatory in this
+          // presentation.
+          Field(
+            'mandatory',
+            TypeSpec.boolean(),
+            required: false,
+            nullable: true,
+          ),
+        ]),
+      ),
       required: false,
       nullable: true,
     ),

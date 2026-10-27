@@ -127,9 +127,11 @@ void main() {
         'return { items = { { id = "q1", kind = "question" } } }',
       );
       expect(r.ok, isTrue, reason: '${r.error}');
+      // 0.15.0: a nil `mandatory` comes back as null (a nullable field).
       expect((r.output!['items'] as List).single, {
         'id': 'q2',
         'kind': 'question',
+        'mandatory': null,
       });
     });
 

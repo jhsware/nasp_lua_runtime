@@ -174,8 +174,9 @@ end
 ''';
       final r = _runtime.run(ScriptKind.questionFollowUp, src, _input());
       expect(r.ok, isTrue, reason: r.error?.toString());
+      // 0.15.0: a nil `mandatory` comes back as null (a nullable field).
       expect(r.output!['questions'], [
-        {'id': 'f1'},
+        {'id': 'f1', 'mandatory': null},
       ]);
       expect(r.output!['reason'], 'r');
     });
@@ -196,7 +197,7 @@ end
       expect(r.ok, isTrue, reason: r.error?.toString());
       expect(r.trace, ['r1=4']);
       expect(r.output!['questions'], [
-        {'id': 'f1'},
+        {'id': 'f1', 'mandatory': null},
       ]);
     });
 
