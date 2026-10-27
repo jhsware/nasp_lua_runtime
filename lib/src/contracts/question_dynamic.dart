@@ -47,6 +47,7 @@ import '../schema.dart';
 /// 1 (0.11.0): `question` / `step` / `signals` / invocation values.
 /// 2 (0.13.0): every timestamp is local epoch seconds in the zone of the run;
 /// a top-level `zone` (required).
+/// 0.15.0 added the optional `mandatory` on the members (additive, still 2).
 const int questionDynamicContractVersion = 2;
 
 /// The global Lua function the runtime invokes:
@@ -99,6 +100,14 @@ final ContractDescriptor questionDynamicContract = ContractDescriptor(
                     Field('position', TypeSpec.integer()),
                   ]),
                 ),
+              ),
+              // The effective setting of the member. Absent from a host
+              // older than 0.15.0.
+              Field(
+                'mandatory',
+                TypeSpec.boolean(),
+                required: false,
+                nullable: true,
               ),
             ]),
           ),

@@ -39,6 +39,8 @@ import 'scheduling.dart' show resolvedSettingsSpec;
 /// 3 (0.13.0): every timestamp is local epoch seconds in the zone of the run;
 /// `study.zone` added (required).
 /// 0.14.0 added the optional `trigger.type` (additive, still 3).
+/// 0.15.0 added the optional `mandatory` on the catalog questions and the
+/// items (additive, still 3).
 const int questionSelectionContractVersion = 3;
 
 /// The global Lua function the runtime invokes:
@@ -92,6 +94,14 @@ final ContractDescriptor questionSelectionContract = ContractDescriptor(
               Field(
                 'set_position',
                 TypeSpec.integer(),
+                required: false,
+                nullable: true,
+              ),
+              // The effective setting of the question. Absent from a host
+              // older than 0.15.0.
+              Field(
+                'mandatory',
+                TypeSpec.boolean(),
                 required: false,
                 nullable: true,
               ),
@@ -153,6 +163,15 @@ final ContractDescriptor questionSelectionContract = ContractDescriptor(
         TypeSpec.object([
           Field('id', TypeSpec.string()),
           Field('kind', TypeSpec.enumeration(['question', 'set'])),
+          // true makes the item mandatory in this round (a question, every
+          // member of a set, or the root of a branched question). false or
+          // absent leaves the effective setting.
+          Field(
+            'mandatory',
+            TypeSpec.boolean(),
+            required: false,
+            nullable: true,
+          ),
         ]),
       ),
     ),
